@@ -59,6 +59,14 @@ class AttendanceRepository(
         employeeDao.deleteEmployee(employee)
     }
 
+    suspend fun purgeSampleEmployees() {
+        employeeDao.deleteSampleEmployees()
+    }
+
+    suspend fun deleteAllEmployees() {
+        employeeDao.deleteAllEmployees()
+    }
+
     suspend fun recordAttendance(
         employee: Employee,
         type: AttendanceType,

@@ -102,6 +102,9 @@ class AttendanceViewModel(
         startClock()
         refreshLocation()
         observeCloudSync()
+        viewModelScope.launch {
+            repository.purgeSampleEmployees()
+        }
         // Welcome voice
         audioHelper.speak("Sistem Absensi Karyawan Siap. Silakan posisikan wajah Anda.")
     }

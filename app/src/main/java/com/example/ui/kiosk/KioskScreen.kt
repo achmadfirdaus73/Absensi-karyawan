@@ -50,7 +50,6 @@ import com.example.ui.theme.KioskCardBorder
 import com.example.ui.theme.KioskDarkBackground
 import com.example.ui.theme.KioskDarkSurface
 import com.example.ui.viewmodel.AttendanceViewModel
-import kotlinx.coroutines.delay
 
 @Composable
 fun KioskScreen(
@@ -63,16 +62,16 @@ fun KioskScreen(
     val recentAttendance by viewModel.recentAttendance.collectAsStateWithLifecycle()
     val kioskSettings by viewModel.kioskSettings.collectAsStateWithLifecycle()
 
-    // The currently identified employee (auto-matched by face or top of registered list)
-    val recognizedEmp = uiState.recognizedEmployee ?: activeEmployees.firstOrNull()
+    // Strictly strictly the employee recognized from live camera (null when nobody is in frame)
+    val recognizedEmp = uiState.recognizedEmployee
 
-    // Automatic Attendance Scan Trigger Loop:
-    // When an employee is in frame and recognized, auto-process attendance seamlessly after 1.5 seconds of steady detection
-    LaunchedEffect(recognizedEmp, uiState.scanState, uiState.isProcessingAttendance, uiState.showSuccessDialog) {
-        if (recognizedEmp != null && !uiState.isProcessingAttendance && !uiState.showSuccessDialog) {
-            delay(1500)
-            if (!uiState.isProcessingAttendance && !uiState.showSuccessDialog) {
-                viewModel.processAutoFaceAttendance(recognizedEmp, uiState.detectedGesture?.type)
+    // Gesture Attendance Trigger:
+    // Only triggers when a REAL recognized employee is in frame AND an explicit gesture (👍 or 🖐️) is detected!
+    LaunchedEffect(uiState.detectedGesture, recognizedEmp, uiState.isProcessingAttendance, uiState.showSuccessDialog) {
+        val gesture = uiState.detectedGesture
+        if (recognizedEmp != null && gesture != null && !uiState.isProcessingAttendance && !uiState.showSuccessDialog) {
+            if (gesture.type == GestureType.THUMBS_UP || gesture.type == GestureType.OPEN_HAND) {
+                viewModel.processBiometricAttendance(recognizedEmp, gesture.type)
             }
         }
     }
@@ -106,12 +105,6 @@ fun KioskScreen(
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(24.dp))
                     .border(1.5.dp, KioskCardBorder, RoundedCornerShape(24.dp))
-                    .clickable {
-                        // Quick tap on camera area to trigger instant auto-attendance if desired
-                        recognizedEmp?.let {
-                            viewModel.processAutoFaceAttendance(it, uiState.detectedGesture?.type)
-                        }
-                    }
             ) {
                 // Live Hardware Camera / ML Vision Stream
                 CameraPreview(
@@ -144,7 +137,10 @@ fun KioskScreen(
             }
 
             // 3. MINIMALIST REAL-TIME ATTENDANCE TICKER (BOTTOM LOG)
-            MinimalAttendanceTicker(recentAttendance = recentAttendance)
+            MinimalAttendanceTicker(
+                recentAttendance = recentAttendance,
+                hasEnrolledEmployees = activeEmployees.isNotEmpty()
+            )
         }
 
         // 4. INSTANT VERIFIED ATTENDANCE POPUP OVERLAY
@@ -292,7 +288,10 @@ fun MinimalKioskHeader(
 }
 
 @Composable
-fun MinimalAttendanceTicker(recentAttendance: List<AttendanceRecord>) {
+fun MinimalAttendanceTicker(
+    recentAttendance: List<AttendanceRecord>,
+    hasEnrolledEmployees: Boolean
+) {
     val lastRecord = recentAttendance.firstOrNull()
 
     Surface(
@@ -354,17 +353,17 @@ fun MinimalAttendanceTicker(recentAttendance: List<AttendanceRecord>) {
                         modifier = Modifier
                             .size(8.dp)
                             .clip(CircleShape)
-                            .background(EmeraldSuccess)
+                            .background(if (hasEnrolledEmployees) EmeraldSuccess else CyanNeon)
                     )
                     Text(
-                        text = "Kiosk Siap • Hadapkan Wajah ke Kamera",
+                        text = if (hasEnrolledEmployees) "Kiosk Siap • Hadapkan Wajah & Gestur 👍 / 🖐️" else "Belum ada karyawan terdaftar • Buka Admin untuk menambah",
                         fontSize = 12.sp,
                         color = Color(0xFF94A3B8)
                     )
                 }
 
                 Text(
-                    text = "Otomatis & Real-Time",
+                    text = if (hasEnrolledEmployees) "AI Biometrik Aktif" else "Daftarkan di Admin",
                     fontSize = 11.sp,
                     color = CyanNeon
                 )

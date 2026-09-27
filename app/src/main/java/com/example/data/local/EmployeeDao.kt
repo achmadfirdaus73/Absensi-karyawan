@@ -38,6 +38,12 @@ interface EmployeeDao {
     @Query("DELETE FROM employees WHERE id = :id")
     suspend fun deleteEmployeeById(id: Long)
 
+    @Query("DELETE FROM employees WHERE employeeCode IN ('EMP-0821', 'EMP-0914', 'EMP-1042', 'EMP-1108', 'EMP-1250', 'EMP-1388')")
+    suspend fun deleteSampleEmployees()
+
+    @Query("DELETE FROM employees")
+    suspend fun deleteAllEmployees()
+
     @Query("SELECT COUNT(*) FROM employees WHERE isActive = 1")
     fun getActiveEmployeeCount(): Flow<Int>
 }
