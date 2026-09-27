@@ -37,11 +37,14 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.PanTool
 import androidx.compose.material.icons.filled.People
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.ReceiptLong
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.ThumbUp
 import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -49,6 +52,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.ScrollableTabRow
@@ -58,6 +62,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -97,6 +102,9 @@ import com.example.ui.theme.KioskDarkBackground
 import com.example.ui.theme.KioskDarkSurface
 import com.example.ui.theme.RoseError
 import com.example.ui.viewmodel.AttendanceViewModel
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @Composable
 fun AdminDashboardScreen(
@@ -115,6 +123,8 @@ fun AdminDashboardScreen(
 
     var selectedTabIndex by remember { mutableIntStateOf(0) }
     var showRegisterDialog by remember { mutableStateOf(false) }
+    var editingEmployee by remember { mutableStateOf<Employee?>(null) }
+    var employeeToDelete by remember { mutableStateOf<Employee?>(null) }
 
     if (!isAuthenticated) {
         // Admin PIN Lock Screen
@@ -159,9 +169,10 @@ fun AdminDashboardScreen(
                     )
 
                     Text(
-                        text = "Masukkan PIN Kiosk untuk mengakses data presensi & pengaturan (Default: 1234)",
+                        text = "Masukkan PIN Kiosk untuk mengelola karyawan & pengaturan (Default: 1234)",
                         fontSize = 12.sp,
-                        color = Color(0xFF94A3B8)
+                        color = Color(0xFF94A3B8),
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
                     )
 
                     OutlinedTextField(
@@ -175,7 +186,7 @@ fun AdminDashboardScreen(
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
                         singleLine = true,
                         isError = pinError,
-                        modifier = Modifier.fillMaxWidth(0.7f),
+                        modifier = Modifier.fillMaxWidth(0.75f),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = CyanNeon,
                             unfocusedBorderColor = Color(0xFF334155),
@@ -198,7 +209,7 @@ fun AdminDashboardScreen(
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF334155)),
                             shape = RoundedCornerShape(12.dp)
                         ) {
-                            Text("Batal")
+                            Text("Batal", color = Color.White)
                         }
 
                         Button(
@@ -255,13 +266,13 @@ fun AdminDashboardScreen(
 
                     Column {
                         Text(
-                            text = "Portal Admin & Pengawasan Presensi",
+                            text = "Portal Manajemen Admin",
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
                         )
                         Text(
-                            text = "${kioskSettings?.companyName} • Real-time Cloud Dashboard",
+                            text = "${kioskSettings?.companyName} • Sinkronisasi Biometrik Wajah",
                             fontSize = 12.sp,
                             color = Color(0xFF94A3B8)
                         )
@@ -273,14 +284,14 @@ fun AdminDashboardScreen(
                     colors = ButtonDefaults.buttonColors(containerColor = EmeraldSuccess),
                     shape = RoundedCornerShape(12.dp)
                 ) {
-                    Text("📺 Kembali ke Kiosk", color = Color.Black, fontWeight = FontWeight.Bold)
+                    Text("📺 Kembali ke Layar Presensi", color = Color.Black, fontWeight = FontWeight.Bold)
                 }
             }
 
             Spacer(modifier = Modifier.height(14.dp))
 
             // Tab Navigation
-            val tabs = listOf("📋 Log Presensi", "👥 Karyawan (${allEmployees.size})", "🔔 Notifikasi Admin", "⚙️ Pengaturan Kiosk")
+            val tabs = listOf("📋 Log Presensi", "👥 Kelola Karyawan (${allEmployees.size})", "🔔 Notifikasi Admin", "⚙️ Pengaturan Kiosk")
             ScrollableTabRow(
                 selectedTabIndex = selectedTabIndex,
                 containerColor = KioskDarkSurface,
@@ -310,8 +321,17 @@ fun AdminDashboardScreen(
                 0 -> AttendanceLogsTab(allAttendance = allAttendance)
                 1 -> EmployeeManagementTab(
                     employees = allEmployees,
-                    onAddClick = { showRegisterDialog = true },
-                    onDeleteClick = { viewModel.deleteEmployee(it) }
+                    onAddClick = {
+                        editingEmployee = null
+                        showRegisterDialog = true
+                    },
+                    onEditClick = { emp ->
+                        editingEmployee = emp
+                        showRegisterDialog = true
+                    },
+                    onDeleteClick = { emp ->
+                        employeeToDelete = emp
+                    }
                 )
                 2 -> AdminNotificationsTab(
                     notifications = notifications,
@@ -326,12 +346,53 @@ fun AdminDashboardScreen(
             }
         }
 
+        // Register / Edit Employee Dialog
         if (showRegisterDialog) {
             RegisterEmployeeDialog(
-                onDismiss = { showRegisterDialog = false },
-                onSave = {
-                    viewModel.addEmployee(it)
+                initialEmployee = editingEmployee,
+                onDismiss = {
                     showRegisterDialog = false
+                    editingEmployee = null
+                },
+                onSave = { emp ->
+                    if (editingEmployee != null) {
+                        viewModel.updateEmployee(emp)
+                    } else {
+                        viewModel.addEmployee(emp)
+                    }
+                    showRegisterDialog = false
+                    editingEmployee = null
+                }
+            )
+        }
+
+        // Delete Confirmation Dialog
+        if (employeeToDelete != null) {
+            AlertDialog(
+                onDismissRequest = { employeeToDelete = null },
+                containerColor = KioskDarkSurface,
+                title = { Text("Hapus Karyawan?", color = Color.White) },
+                text = {
+                    Text(
+                        "Apakah Anda yakin ingin menghapus ${employeeToDelete!!.name} (${employeeToDelete!!.employeeCode}) beserta data biometrik wajahnya?",
+                        color = Color(0xFFCBD5E1)
+                    )
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            employeeToDelete?.let { viewModel.deleteEmployee(it) }
+                            employeeToDelete = null
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = RoseError)
+                    ) {
+                        Text("Hapus", color = Color.White)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { employeeToDelete = null }) {
+                        Text("Batal", color = Color(0xFF94A3B8))
+                    }
                 }
             )
         }
@@ -359,7 +420,8 @@ fun AttendanceLogsTab(allAttendance: List<AttendanceRecord>) {
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { searchQuery = it },
-                placeholder = { Text("Filter nama karyawan...") },
+                placeholder = { Text("Cari nama atau NIK...") },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = CyanNeon) },
                 modifier = Modifier.weight(1f),
                 singleLine = true,
                 colors = OutlinedTextFieldDefaults.colors(
@@ -512,75 +574,160 @@ fun AttendanceLogsTab(allAttendance: List<AttendanceRecord>) {
 fun EmployeeManagementTab(
     employees: List<Employee>,
     onAddClick: () -> Unit,
+    onEditClick: (Employee) -> Unit,
     onDeleteClick: (Employee) -> Unit
 ) {
+    var searchQuery by remember { mutableStateOf("") }
+
+    val filteredEmployees = remember(employees, searchQuery) {
+        employees.filter {
+            searchQuery.isBlank() ||
+            it.name.contains(searchQuery, ignoreCase = true) ||
+            it.employeeCode.contains(searchQuery, ignoreCase = true) ||
+            it.department.contains(searchQuery, ignoreCase = true) ||
+            it.role.contains(searchQuery, ignoreCase = true)
+        }
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            items(employees) { emp ->
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = KioskCardBackground),
-                    shape = RoundedCornerShape(14.dp)
+        Column(modifier = Modifier.fillMaxSize()) {
+            // Search Bar & Add Button
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    placeholder = { Text("Cari nama, NIK, divisi, atau jabatan...") },
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = CyanNeon) },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = CyanNeon,
+                        unfocusedBorderColor = Color(0xFF334155),
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White
+                    )
+                )
+
+                Button(
+                    onClick = onAddClick,
+                    colors = ButtonDefaults.buttonColors(containerColor = CyanNeon),
+                    shape = RoundedCornerShape(12.dp)
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(14.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        AsyncImage(
-                            model = ImageRequest.Builder(LocalContext.current)
-                                .data(emp.photoUri.ifBlank { "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100" })
-                                .crossfade(true)
-                                .build(),
-                            contentDescription = emp.name,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier
-                                .size(48.dp)
-                                .clip(CircleShape)
+                    Icon(Icons.Default.Add, contentDescription = null, tint = Color.Black)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Tambah Karyawan", color = Color.Black, fontWeight = FontWeight.Bold)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            if (filteredEmployees.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(24.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            imageVector = Icons.Default.Person,
+                            contentDescription = null,
+                            tint = Color(0xFF64748B),
+                            modifier = Modifier.size(48.dp)
                         )
-
-                        Spacer(modifier = Modifier.width(14.dp))
-
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = emp.name,
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
-                            )
-                            Text(
-                                text = "${emp.employeeCode} • ${emp.role} (${emp.department})",
-                                fontSize = 12.sp,
-                                color = Color(0xFFCBD5E1)
-                            )
-                            Text(
-                                text = "⏰ Shift: ${emp.shiftStart} - ${emp.shiftEnd} WIB • Biometrik Terdaftar",
-                                fontSize = 11.sp,
-                                color = EmeraldSuccessLight
-                            )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = if (searchQuery.isNotBlank()) "Tidak ada karyawan yang cocok" else "Belum ada data karyawan",
+                            color = Color(0xFF94A3B8),
+                            fontSize = 14.sp
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Button(
+                            onClick = onAddClick,
+                            colors = ButtonDefaults.buttonColors(containerColor = CyanNeon)
+                        ) {
+                            Text("Daftarkan Karyawan Pertama", color = Color.Black, fontWeight = FontWeight.Bold)
                         }
+                    }
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    items(filteredEmployees) { emp ->
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = KioskCardBackground),
+                            shape = RoundedCornerShape(14.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(14.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                AsyncImage(
+                                    model = ImageRequest.Builder(LocalContext.current)
+                                        .data(emp.photoUri.ifBlank { "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100" })
+                                        .crossfade(true)
+                                        .build(),
+                                    contentDescription = emp.name,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier
+                                        .size(52.dp)
+                                        .clip(CircleShape)
+                                        .border(1.5.dp, CyanNeon.copy(alpha = 0.5f), CircleShape)
+                                )
 
-                        IconButton(onClick = { onDeleteClick(emp) }) {
-                            Icon(Icons.Default.Delete, contentDescription = "Hapus", tint = RoseError)
+                                Spacer(modifier = Modifier.width(14.dp))
+
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Text(
+                                            text = emp.name,
+                                            fontSize = 15.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color.White
+                                        )
+                                        Text(
+                                            text = "(${emp.employeeCode})",
+                                            fontSize = 12.sp,
+                                            color = CyanNeonLight
+                                        )
+                                    }
+                                    Text(
+                                        text = "${emp.role} • Divisi ${emp.department}",
+                                        fontSize = 12.sp,
+                                        color = Color(0xFFCBD5E1)
+                                    )
+                                    Text(
+                                        text = "⏰ Shift: ${emp.shiftStart} - ${emp.shiftEnd} WIB • Biometrik Wajah Terdaftar",
+                                        fontSize = 11.sp,
+                                        color = EmeraldSuccessLight
+                                    )
+                                }
+
+                                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    IconButton(onClick = { onEditClick(emp) }) {
+                                        Icon(Icons.Default.Edit, contentDescription = "Edit", tint = CyanNeon)
+                                    }
+                                    IconButton(onClick = { onDeleteClick(emp) }) {
+                                        Icon(Icons.Default.Delete, contentDescription = "Hapus", tint = RoseError)
+                                    }
+                                }
+                            }
                         }
                     }
                 }
             }
-        }
-
-        // Floating Action Button to Register Employee
-        FloatingActionButton(
-            onClick = onAddClick,
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(16.dp),
-            containerColor = CyanNeon
-        ) {
-            Icon(Icons.Default.Add, contentDescription = "Tambah Karyawan", tint = Color.Black)
         }
     }
 }
@@ -591,6 +738,8 @@ fun AdminNotificationsTab(
     onTestNotification: () -> Unit,
     onMarkAllRead: () -> Unit
 ) {
+    val timeFmt = remember { SimpleDateFormat("dd MMM, HH:mm 'WIB'", Locale("id", "ID")) }
+
     Column(modifier = Modifier.fillMaxSize()) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -598,27 +747,25 @@ fun AdminNotificationsTab(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column {
-                Text(
-                    text = "Pengiriman Notifikasi Otomatis",
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
-                )
-                Text(
-                    text = "Diteruskan ke Telegram Webhook, Email & In-App Alerts",
-                    fontSize = 12.sp,
-                    color = Color(0xFF94A3B8)
-                )
+                Text("Notifikasi Presensi & Peringatan", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                Text("Laporan real-time kehadiran, keterlambatan & geofence", fontSize = 12.sp, color = Color(0xFF94A3B8))
             }
-
-            Button(
-                onClick = onTestNotification,
-                colors = ButtonDefaults.buttonColors(containerColor = CyanNeon),
-                shape = RoundedCornerShape(10.dp)
-            ) {
-                Icon(Icons.Default.Send, contentDescription = null, tint = Color.Black, modifier = Modifier.size(16.dp))
-                Spacer(modifier = Modifier.width(6.dp))
-                Text("Uji Kirim Notifikasi", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = onTestNotification,
+                    colors = ButtonDefaults.buttonColors(containerColor = CyanNeon),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Icon(Icons.Default.Send, contentDescription = null, tint = Color.Black, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Uji Notifikasi", color = Color.Black, fontSize = 12.sp)
+                }
+                OutlinedButton(
+                    onClick = onMarkAllRead,
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Text("Tandai Semua Dibaca", color = Color.White, fontSize = 12.sp)
+                }
             }
         }
 
@@ -626,7 +773,7 @@ fun AdminNotificationsTab(
 
         if (notifications.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("Belum ada log notifikasi yang terkirim", color = Color(0xFF64748B))
+                Text("Belum ada notifikasi baru", color = Color(0xFF64748B))
             }
         } else {
             LazyColumn(
@@ -643,49 +790,24 @@ fun AdminNotificationsTab(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(14.dp),
-                            verticalAlignment = Alignment.Top
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .size(36.dp)
+                                    .size(38.dp)
                                     .clip(CircleShape)
                                     .background(CyanNeon.copy(alpha = 0.2f)),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.NotificationsActive,
-                                    contentDescription = null,
-                                    tint = CyanNeon,
-                                    modifier = Modifier.size(18.dp)
-                                )
+                                Icon(Icons.Default.NotificationsActive, contentDescription = null, tint = CyanNeon, modifier = Modifier.size(20.dp))
                             }
 
                             Spacer(modifier = Modifier.width(12.dp))
 
                             Column(modifier = Modifier.weight(1f)) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Text(
-                                        text = notif.employeeName,
-                                        fontSize = 14.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color.White
-                                    )
-                                    Text(
-                                        text = notif.channel,
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = EmeraldSuccessLight
-                                    )
-                                }
-
-                                Text(
-                                    text = notif.message,
-                                    fontSize = 12.sp,
-                                    color = Color(0xFFCBD5E1)
-                                )
+                                Text("${notif.employeeName} (${notif.employeeCode})", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                Text(notif.message, fontSize = 12.sp, color = Color(0xFFCBD5E1))
+                                Text("Waktu: ${timeFmt.format(Date(notif.timestamp))}", fontSize = 10.sp, color = Color(0xFF94A3B8))
                             }
                         }
                     }
@@ -701,14 +823,15 @@ fun KioskSettingsTab(
     onSaveSettings: (KioskSettings) -> Unit,
     onForceSync: () -> Unit
 ) {
-    var kioskName by remember(settings) { mutableStateOf(settings.kioskName) }
-    var companyName by remember(settings) { mutableStateOf(settings.companyName) }
-    var officeAddress by remember(settings) { mutableStateOf(settings.officeAddress) }
-    var officeRadius by remember(settings) { mutableStateOf(settings.officeRadiusMeters.toFloat()) }
-    var adminEmail by remember(settings) { mutableStateOf(settings.adminEmail) }
-    var adminWebhook by remember(settings) { mutableStateOf(settings.adminTelegramWebhookUrl) }
-    var soundVoice by remember(settings) { mutableStateOf(settings.soundVoiceFeedback) }
-    var pin by remember(settings) { mutableStateOf(settings.kioskPin) }
+    var companyName by remember { mutableStateOf(settings.companyName) }
+    var kioskName by remember { mutableStateOf(settings.kioskName) }
+    var officeAddress by remember { mutableStateOf(settings.officeAddress) }
+    var officeRadius by remember { mutableStateOf(settings.officeRadiusMeters.toString()) }
+    var voiceFeedback by remember { mutableStateOf(settings.soundVoiceFeedback) }
+    var autoSync by remember { mutableStateOf(settings.autoSyncToCloud) }
+    var telegramWebhook by remember { mutableStateOf(settings.adminTelegramWebhookUrl) }
+    var adminEmail by remember { mutableStateOf(settings.adminEmail) }
+    var kioskPin by remember { mutableStateOf(settings.kioskPin) }
 
     Column(
         modifier = Modifier
@@ -716,147 +839,191 @@ fun KioskSettingsTab(
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        Text("Konfigurasi Kiosk & Geofence GPS", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
-
-        OutlinedTextField(
-            value = companyName,
-            onValueChange = { companyName = it },
-            label = { Text("Nama Perusahaan / Instansi") },
+        Card(
             modifier = Modifier.fillMaxWidth(),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = CyanNeon,
-                unfocusedBorderColor = Color(0xFF334155),
-                focusedTextColor = Color.White,
-                unfocusedTextColor = Color.White
-            )
-        )
-
-        OutlinedTextField(
-            value = kioskName,
-            onValueChange = { kioskName = it },
-            label = { Text("Nama Device Kiosk Tablet Dinding") },
-            modifier = Modifier.fillMaxWidth(),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = CyanNeon,
-                unfocusedBorderColor = Color(0xFF334155),
-                focusedTextColor = Color.White,
-                unfocusedTextColor = Color.White
-            )
-        )
-
-        OutlinedTextField(
-            value = officeAddress,
-            onValueChange = { officeAddress = it },
-            label = { Text("Alamat Kantor GPS") },
-            modifier = Modifier.fillMaxWidth(),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = CyanNeon,
-                unfocusedBorderColor = Color(0xFF334155),
-                focusedTextColor = Color.White,
-                unfocusedTextColor = Color.White
-            )
-        )
-
-        Column {
-            Text("Radius Geofence: ${officeRadius.toInt()} Meter", color = Color(0xFFCBD5E1), fontSize = 13.sp)
-            Slider(
-                value = officeRadius,
-                onValueChange = { officeRadius = it },
-                valueRange = 50f..1000f,
-                steps = 18
-            )
-        }
-
-        OutlinedTextField(
-            value = adminEmail,
-            onValueChange = { adminEmail = it },
-            label = { Text("Email Notifikasi Admin / HR") },
-            modifier = Modifier.fillMaxWidth(),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = CyanNeon,
-                unfocusedBorderColor = Color(0xFF334155),
-                focusedTextColor = Color.White,
-                unfocusedTextColor = Color.White
-            )
-        )
-
-        OutlinedTextField(
-            value = adminWebhook,
-            onValueChange = { adminWebhook = it },
-            label = { Text("Webhook URL Telegram / API Notifikasi") },
-            modifier = Modifier.fillMaxWidth(),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = CyanNeon,
-                unfocusedBorderColor = Color(0xFF334155),
-                focusedTextColor = Color.White,
-                unfocusedTextColor = Color.White
-            )
-        )
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            colors = CardDefaults.cardColors(containerColor = KioskCardBackground),
+            shape = RoundedCornerShape(16.dp)
         ) {
-            Column {
-                Text("Suara & Voice TTS Indonesia", color = Color.White, fontWeight = FontWeight.SemiBold)
-                Text("Panduan suara otomatis saat presensi", color = Color(0xFF94A3B8), fontSize = 12.sp)
-            }
-            Switch(
-                checked = soundVoice,
-                onCheckedChange = { soundVoice = it },
-                colors = SwitchDefaults.colors(checkedThumbColor = CyanNeon)
-            )
-        }
+            Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("Identitas Perusahaan & Lokasi Kiosk", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
 
-        OutlinedTextField(
-            value = pin,
-            onValueChange = { pin = it },
-            label = { Text("PIN Kiosk Admin (4-Digit)") },
-            modifier = Modifier.fillMaxWidth(),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = CyanNeon,
-                unfocusedBorderColor = Color(0xFF334155),
-                focusedTextColor = Color.White,
-                unfocusedTextColor = Color.White
-            )
-        )
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Button(
-                onClick = onForceSync,
-                modifier = Modifier.weight(1f),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E293B)),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Icon(Icons.Default.CloudSync, contentDescription = null, tint = CyanNeon)
-                Spacer(modifier = Modifier.width(6.dp))
-                Text("Paksa Sinkron Cloud", color = Color.White)
-            }
-
-            Button(
-                onClick = {
-                    val updated = settings.copy(
-                        companyName = companyName,
-                        kioskName = kioskName,
-                        officeAddress = officeAddress,
-                        officeRadiusMeters = officeRadius.toDouble(),
-                        adminEmail = adminEmail,
-                        adminTelegramWebhookUrl = adminWebhook,
-                        soundVoiceFeedback = soundVoice,
-                        kioskPin = pin
+                OutlinedTextField(
+                    value = companyName,
+                    onValueChange = { companyName = it },
+                    label = { Text("Nama Perusahaan / Instansi") },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = CyanNeon,
+                        unfocusedBorderColor = Color(0xFF334155),
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White
                     )
-                    onSaveSettings(updated)
-                },
-                modifier = Modifier.weight(1f),
-                colors = ButtonDefaults.buttonColors(containerColor = CyanNeon),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Text("Simpan Pengaturan", color = Color.Black, fontWeight = FontWeight.Bold)
+                )
+
+                OutlinedTextField(
+                    value = kioskName,
+                    onValueChange = { kioskName = it },
+                    label = { Text("Nama Perangkat Kiosk (contoh: Kiosk Lobby)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = CyanNeon,
+                        unfocusedBorderColor = Color(0xFF334155),
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White
+                    )
+                )
+
+                OutlinedTextField(
+                    value = officeAddress,
+                    onValueChange = { officeAddress = it },
+                    label = { Text("Alamat Kantor GPS") },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = CyanNeon,
+                        unfocusedBorderColor = Color(0xFF334155),
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White
+                    )
+                )
+
+                OutlinedTextField(
+                    value = officeRadius,
+                    onValueChange = { officeRadius = it },
+                    label = { Text("Radius Geofence Valid (Meter)") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = CyanNeon,
+                        unfocusedBorderColor = Color(0xFF334155),
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White
+                    )
+                )
             }
         }
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = KioskCardBackground),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("Keamanan & PIN Kiosk", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
+
+                OutlinedTextField(
+                    value = kioskPin,
+                    onValueChange = { kioskPin = it },
+                    label = { Text("PIN Kiosk Admin (Default: 1234)") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = CyanNeon,
+                        unfocusedBorderColor = Color(0xFF334155),
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White
+                    )
+                )
+            }
+        }
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = KioskCardBackground),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("Integrasi Notifikasi Admin & Cloud Sync", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
+
+                OutlinedTextField(
+                    value = adminEmail,
+                    onValueChange = { adminEmail = it },
+                    label = { Text("Email Admin Penerima Rekap") },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = CyanNeon,
+                        unfocusedBorderColor = Color(0xFF334155),
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White
+                    )
+                )
+
+                OutlinedTextField(
+                    value = telegramWebhook,
+                    onValueChange = { telegramWebhook = it },
+                    label = { Text("Webhook URL Bot Telegram Admin (Opsional)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = CyanNeon,
+                        unfocusedBorderColor = Color(0xFF334155),
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White
+                    )
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Suara & Konfirmasi Audio TTS", color = Color.White)
+                    Switch(
+                        checked = voiceFeedback,
+                        onCheckedChange = { voiceFeedback = it },
+                        colors = SwitchDefaults.colors(checkedThumbColor = CyanNeon, checkedTrackColor = CyanNeon.copy(alpha = 0.5f))
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Otomatis Sinkron ke Cloud Server", color = Color.White)
+                    Switch(
+                        checked = autoSync,
+                        onCheckedChange = { autoSync = it },
+                        colors = SwitchDefaults.colors(checkedThumbColor = EmeraldSuccess, checkedTrackColor = EmeraldSuccess.copy(alpha = 0.5f))
+                    )
+                }
+            }
+        }
+
+        Button(
+            onClick = {
+                val updated = settings.copy(
+                    companyName = companyName.trim(),
+                    kioskName = kioskName.trim(),
+                    officeAddress = officeAddress.trim(),
+                    officeRadiusMeters = officeRadius.toDoubleOrNull() ?: 50.0,
+                    soundVoiceFeedback = voiceFeedback,
+                    autoSyncToCloud = autoSync,
+                    adminTelegramWebhookUrl = telegramWebhook.trim(),
+                    adminEmail = adminEmail.trim(),
+                    kioskPin = kioskPin.trim()
+                )
+                onSaveSettings(updated)
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(50.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = CyanNeon),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Text("Simpan Seluruh Pengaturan Kiosk", color = Color.Black, fontWeight = FontWeight.Bold)
+        }
+
+        OutlinedButton(
+            onClick = onForceSync,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(48.dp),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Icon(Icons.Default.CloudSync, contentDescription = null, tint = EmeraldSuccess)
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Sinkronkan Semua Data ke Cloud Sekarang", color = Color.White)
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
     }
 }

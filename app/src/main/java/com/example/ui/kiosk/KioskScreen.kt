@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.FlipCameraAndroid
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.PanTool
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Security
@@ -103,7 +104,10 @@ fun KioskScreen(
     val recentAttendance by viewModel.recentAttendance.collectAsStateWithLifecycle()
     val kioskSettings by viewModel.kioskSettings.collectAsStateWithLifecycle()
 
-    var selectedSimEmployee by remember { mutableStateOf<Employee?>(null) }
+    var selectedEmployee by remember { mutableStateOf<Employee?>(null) }
+
+    // Synchronize selected employee with auto-recognized employee from camera
+    val currentTargetEmployee = uiState.recognizedEmployee ?: selectedEmployee ?: activeEmployees.firstOrNull()
 
     BoxWithConstraints(
         modifier = modifier
@@ -113,7 +117,7 @@ fun KioskScreen(
         val isWideScreen = maxWidth > 720.dp
 
         if (isWideScreen) {
-            // WIDE TABLET LANDSCAPE LAYOUT
+            // WIDE TABLET LANDSCAPE DUAL-PANE LAYOUT
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -123,7 +127,7 @@ fun KioskScreen(
                     timeString = uiState.currentTimeString,
                     dateString = uiState.currentDateString,
                     companyName = kioskSettings?.companyName ?: "PT DIGITAL NUSANTARA UTAMA",
-                    kioskName = kioskSettings?.kioskName ?: "Wall Tablet Kiosk",
+                    kioskName = kioskSettings?.kioskName ?: "Kiosk Presensi Biometrik",
                     locationAddress = uiState.locationInfo.address,
                     isGeofenceOk = uiState.locationInfo.isWithinOfficeGeofence,
                     cloudStatus = uiState.cloudStatus,
@@ -139,7 +143,7 @@ fun KioskScreen(
                         .fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    // Left Column: Live Camera + Biometric HUD + Interactive Action Bar
+                    // Left Column: Live Camera + Biometric HUD + Action Bar
                     Column(
                         modifier = Modifier
                             .weight(1.25f)
@@ -160,7 +164,7 @@ fun KioskScreen(
 
                             BiometricHudOverlay(
                                 scanState = uiState.scanState,
-                                recognizedEmployee = uiState.recognizedEmployee ?: selectedSimEmployee,
+                                recognizedEmployee = currentTargetEmployee,
                                 detectedGesture = uiState.detectedGesture
                             )
 
@@ -181,8 +185,8 @@ fun KioskScreen(
 
                         EmployeeInteractiveActionBar(
                             employees = activeEmployees,
-                            selectedEmployee = selectedSimEmployee ?: activeEmployees.firstOrNull(),
-                            onSelectEmployee = { selectedSimEmployee = it },
+                            selectedEmployee = currentTargetEmployee,
+                            onSelectEmployee = { selectedEmployee = it },
                             onCheckInThumbsUp = { emp ->
                                 viewModel.processBiometricAttendance(emp, GestureType.THUMBS_UP)
                             },
@@ -190,11 +194,12 @@ fun KioskScreen(
                                 viewModel.processBiometricAttendance(emp, GestureType.OPEN_HAND)
                             },
                             onManualAttendance = { viewModel.openManualDialog() },
+                            onOpenAdmin = onOpenAdmin,
                             isProcessing = uiState.isProcessingAttendance
                         )
                     }
 
-                    // Right Column: Summary Stats & Recent Attendance Feed
+                    // Right Column: Live Summary Stats & Live Attendance Log
                     Column(
                         modifier = Modifier
                             .weight(0.95f)
@@ -211,7 +216,7 @@ fun KioskScreen(
                 }
             }
         } else {
-            // VERTICAL / PHONE / PORTRAIT SCROLLABLE LAYOUT
+            // PORTRAIT / PHONE / COMPACT SCROLLABLE LAYOUT
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -224,7 +229,7 @@ fun KioskScreen(
                     timeString = uiState.currentTimeString,
                     dateString = uiState.currentDateString,
                     companyName = kioskSettings?.companyName ?: "PT DIGITAL NUSANTARA UTAMA",
-                    kioskName = kioskSettings?.kioskName ?: "Wall Tablet Kiosk",
+                    kioskName = kioskSettings?.kioskName ?: "Kiosk Presensi Biometrik",
                     locationAddress = uiState.locationInfo.address,
                     isGeofenceOk = uiState.locationInfo.isWithinOfficeGeofence,
                     cloudStatus = uiState.cloudStatus,
@@ -246,7 +251,7 @@ fun KioskScreen(
 
                     BiometricHudOverlay(
                         scanState = uiState.scanState,
-                        recognizedEmployee = uiState.recognizedEmployee ?: selectedSimEmployee,
+                        recognizedEmployee = currentTargetEmployee,
                         detectedGesture = uiState.detectedGesture
                     )
 
@@ -266,11 +271,11 @@ fun KioskScreen(
                     }
                 }
 
-                // Interactive Employee Selector & Realtime Buttons (Masuk 👍 & Pulang 🖐️)
+                // Interactive Employee Bar & Realtime Absen Buttons (Masuk 👍 & Pulang 🖐️)
                 EmployeeInteractiveActionBar(
                     employees = activeEmployees,
-                    selectedEmployee = selectedSimEmployee ?: activeEmployees.firstOrNull(),
-                    onSelectEmployee = { selectedSimEmployee = it },
+                    selectedEmployee = currentTargetEmployee,
+                    onSelectEmployee = { selectedEmployee = it },
                     onCheckInThumbsUp = { emp ->
                         viewModel.processBiometricAttendance(emp, GestureType.THUMBS_UP)
                     },
@@ -278,13 +283,14 @@ fun KioskScreen(
                         viewModel.processBiometricAttendance(emp, GestureType.OPEN_HAND)
                     },
                     onManualAttendance = { viewModel.openManualDialog() },
+                    onOpenAdmin = onOpenAdmin,
                     isProcessing = uiState.isProcessingAttendance
                 )
 
-                // Stats Cards
+                // Summary Stats Cards
                 AttendanceSummaryStatsCards(recentAttendance = recentAttendance)
 
-                // Recent Attendance List (Fixed height scrollable container on phone)
+                // Recent Attendance List
                 RecentAttendanceFeedCard(
                     recentAttendance = recentAttendance,
                     modifier = Modifier
@@ -347,7 +353,8 @@ fun KioskMobileHeaderBar(
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.weight(1f, fill = false)
                 ) {
                     Box(
                         modifier = Modifier
@@ -640,6 +647,7 @@ fun EmployeeInteractiveActionBar(
     onCheckInThumbsUp: (Employee) -> Unit,
     onCheckOut5Fingers: (Employee) -> Unit,
     onManualAttendance: () -> Unit,
+    onOpenAdmin: () -> Unit,
     isProcessing: Boolean
 ) {
     Surface(
@@ -661,68 +669,94 @@ fun EmployeeInteractiveActionBar(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "👤 Karyawan di Depan Kamera (Wajah):",
+                    text = "👤 Karyawan Terdaftar (Biometrik Wajah):",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = Color(0xFF94A3B8)
                 )
 
-                Text(
-                    text = "Klik nama untuk pilih",
-                    fontSize = 11.sp,
-                    color = CyanNeon
-                )
+                if (employees.isNotEmpty()) {
+                    Text(
+                        text = "${employees.size} Terdaftar",
+                        fontSize = 11.sp,
+                        color = CyanNeon
+                    )
+                }
             }
 
-            LazyRow(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(employees) { emp ->
-                    val isSelected = selectedEmployee?.id == emp.id
-                    Surface(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(12.dp))
-                            .clickable { onSelectEmployee(emp) },
-                        shape = RoundedCornerShape(12.dp),
-                        color = if (isSelected) CyanNeon.copy(alpha = 0.25f) else KioskCardBackground,
-                        border = if (isSelected) androidx.compose.foundation.BorderStroke(1.5.dp, CyanNeon) else null
+            if (employees.isEmpty()) {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable { onOpenAdmin() },
+                    shape = RoundedCornerShape(12.dp),
+                    color = KioskCardBackground
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        Icon(Icons.Default.PersonAdd, contentDescription = null, tint = CyanNeon)
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Belum ada data karyawan", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                            Text("Klik di sini untuk mendaftarkan foto & biometrik karyawan di Admin", fontSize = 11.sp, color = Color(0xFF94A3B8))
+                        }
+                    }
+                }
+            } else {
+                LazyRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(employees) { emp ->
+                        val isSelected = selectedEmployee?.id == emp.id
+                        Surface(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable { onSelectEmployee(emp) },
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (isSelected) CyanNeon.copy(alpha = 0.25f) else KioskCardBackground,
+                            border = if (isSelected) androidx.compose.foundation.BorderStroke(1.5.dp, CyanNeon) else null
                         ) {
-                            AsyncImage(
-                                model = ImageRequest.Builder(LocalContext.current)
-                                    .data(emp.photoUri.ifBlank { "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=80" })
-                                    .crossfade(true)
-                                    .build(),
-                                contentDescription = emp.name,
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier
-                                    .size(28.dp)
-                                    .clip(CircleShape)
-                            )
-                            Column {
-                                Text(
-                                    text = emp.name,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = Color.White
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                AsyncImage(
+                                    model = ImageRequest.Builder(LocalContext.current)
+                                        .data(emp.photoUri.ifBlank { "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=80" })
+                                        .crossfade(true)
+                                        .build(),
+                                    contentDescription = emp.name,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier
+                                        .size(32.dp)
+                                        .clip(CircleShape)
+                                        .border(1.dp, if (isSelected) CyanNeon else Color(0xFF334155), CircleShape)
                                 )
-                                Text(
-                                    text = emp.employeeCode,
-                                    fontSize = 10.sp,
-                                    color = Color(0xFF94A3B8)
-                                )
+                                Column {
+                                    Text(
+                                        text = emp.name,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = Color.White
+                                    )
+                                    Text(
+                                        text = "${emp.role} • ${emp.employeeCode}",
+                                        fontSize = 10.sp,
+                                        color = Color(0xFF94A3B8)
+                                    )
+                                }
                             }
                         }
                     }
                 }
             }
 
-            // Big Action Buttons for Real-time Gesture Presensi
+            // Big Action Buttons for Real-time Biometric Presensi
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -754,13 +788,13 @@ fun EmployeeInteractiveActionBar(
                         )
                         Column(horizontalAlignment = Alignment.Start) {
                             Text(
-                                text = "MASUK (👍 SIP)",
+                                text = "ABSEN MASUK (👍)",
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.Black
                             )
                             Text(
-                                text = "Wajah + Jempol",
+                                text = "Wajah + Gestur Masuk",
                                 fontSize = 9.sp,
                                 color = Color(0xFF064E3B)
                             )
@@ -795,13 +829,13 @@ fun EmployeeInteractiveActionBar(
                         )
                         Column(horizontalAlignment = Alignment.Start) {
                             Text(
-                                text = "PULANG (🖐️ 5 JARI)",
+                                text = "ABSEN PULANG (🖐️)",
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.Black
                             )
                             Text(
-                                text = "Wajah + 5 Jari",
+                                text = "Wajah + Gestur Pulang",
                                 fontSize = 9.sp,
                                 color = Color(0xFF78350F)
                             )
@@ -856,7 +890,7 @@ fun AttendanceSummaryStatsCards(recentAttendance: List<AttendanceRecord>) {
                     fontWeight = FontWeight.Bold,
                     color = EmeraldSuccessLight
                 )
-                Text(text = "👍 Verified", fontSize = 9.sp, color = EmeraldSuccess)
+                Text(text = "👍 Terverifikasi", fontSize = 9.sp, color = EmeraldSuccess)
             }
         }
 
@@ -878,7 +912,7 @@ fun AttendanceSummaryStatsCards(recentAttendance: List<AttendanceRecord>) {
                     fontWeight = FontWeight.Bold,
                     color = AmberCheckoutLight
                 )
-                Text(text = "🖐️ Verified", fontSize = 9.sp, color = AmberCheckout)
+                Text(text = "🖐️ Terverifikasi", fontSize = 9.sp, color = AmberCheckout)
             }
         }
 
@@ -900,7 +934,7 @@ fun AttendanceSummaryStatsCards(recentAttendance: List<AttendanceRecord>) {
                     fontWeight = FontWeight.Bold,
                     color = RoseError
                 )
-                Text(text = "> Jam Shift", fontSize = 9.sp, color = Color(0xFFFDA4AF))
+                Text(text = "> Shift Kantor", fontSize = 9.sp, color = Color(0xFFFDA4AF))
             }
         }
     }
@@ -970,7 +1004,7 @@ fun RecentAttendanceFeedCard(
                         )
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = "Belum ada presensi hari ini",
+                            text = "Belum ada presensi tercatat hari ini",
                             fontSize = 12.sp,
                             color = Color(0xFF64748B)
                         )
@@ -1016,7 +1050,7 @@ fun RecentAttendanceFeedCard(
                                         color = Color.White
                                     )
                                     Text(
-                                        text = "${record.department} • ${record.formattedTime}",
+                                        text = "${record.department} • ${record.formattedDate} ${record.formattedTime}",
                                         fontSize = 11.sp,
                                         color = Color(0xFF94A3B8)
                                     )
