@@ -26,6 +26,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -38,6 +39,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.model.AttendanceRecord
 import com.example.data.model.AttendanceType
+import com.example.data.model.GestureType
 import com.example.network.CloudSyncStatus
 import com.example.ui.theme.AmberCheckout
 import com.example.ui.theme.CyanNeon
@@ -58,6 +60,20 @@ fun KioskScreen(
     val activeEmployees by viewModel.activeEmployees.collectAsStateWithLifecycle()
     val recentAttendance by viewModel.recentAttendance.collectAsStateWithLifecycle()
     val kioskSettings by viewModel.kioskSettings.collectAsStateWithLifecycle()
+
+    val currentEmployee = uiState.recognizedEmployee
+
+    // Trigger attendance ONLY when:
+    // 1. Employee face is recognized
+    // 2. An actual gesture is detected (👍 or 🖐️)
+    LaunchedEffect(uiState.detectedGesture, currentEmployee, uiState.isProcessingAttendance, uiState.showSuccessDialog) {
+        val gesture = uiState.detectedGesture
+        if (currentEmployee != null && gesture != null && !uiState.isProcessingAttendance && !uiState.showSuccessDialog) {
+            if (gesture.type == GestureType.THUMBS_UP || gesture.type == GestureType.OPEN_HAND) {
+                viewModel.processBiometricAttendance(currentEmployee, gesture.type)
+            }
+        }
+    }
 
     Box(
         modifier = modifier
@@ -81,7 +97,7 @@ fun KioskScreen(
                 onOpenAdmin = onOpenAdmin
             )
 
-            // 2. MAIN FULLSTAGE CAMERA VIEWPORT (PURE VIDEO STREAM + DETECTED CARD ONLY)
+            // 2. MAIN FULLSTAGE CAMERA VIEWPORT (ZERO BUTTONS - PURE GESTURE ATTENDANCE)
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -89,7 +105,7 @@ fun KioskScreen(
                     .clip(RoundedCornerShape(24.dp))
                     .border(1.5.dp, KioskCardBorder, RoundedCornerShape(24.dp))
             ) {
-                // Live Hardware Camera with Google ML Kit Face & Gesture Analyzer
+                // Live Hardware Camera with HandGestureDetector
                 CameraPreview(
                     isFrontCamera = uiState.isFrontCamera,
                     onVisionEvent = { hasFace, gesture ->
@@ -98,9 +114,9 @@ fun KioskScreen(
                     modifier = Modifier.fillMaxSize()
                 )
 
-                // ONLY the Detected Employee Badge appears when face is recognized
+                // ONLY the Detected Employee Badge appears when face is recognized (NO BUTTONS)
                 BiometricHudOverlay(
-                    recognizedEmployee = uiState.recognizedEmployee,
+                    recognizedEmployee = currentEmployee,
                     activeGesture = uiState.detectedGesture?.type
                 )
 
@@ -125,7 +141,7 @@ fun KioskScreen(
             MinimalAttendanceTicker(
                 recentAttendance = recentAttendance,
                 hasEnrolledEmployees = activeEmployees.isNotEmpty(),
-                hasRecognizedFace = uiState.recognizedEmployee != null
+                hasRecognizedFace = currentEmployee != null
             )
         }
 
@@ -343,14 +359,14 @@ fun MinimalAttendanceTicker(
                             .background(if (hasRecognizedFace) EmeraldSuccess else CyanNeon)
                     )
                     Text(
-                        text = if (hasRecognizedFace) "Wajah Terdeteksi • Berikan 👍 Masuk atau 🖐️ Pulang" else if (hasEnrolledEmployees) "Kamera Siap • Posisikan Wajah di Depan Kamera" else "Belum ada karyawan terdaftar • Buka Admin untuk menambah",
+                        text = if (hasRecognizedFace) "Wajah Terdeteksi • Acungkan 👍 Masuk atau 🖐️ Pulang" else if (hasEnrolledEmployees) "Kamera Siap • Posisikan Wajah di Depan Kamera" else "Belum ada karyawan terdaftar • Buka Admin untuk menambah",
                         fontSize = 12.sp,
                         color = Color(0xFF94A3B8)
                     )
                 }
 
                 Text(
-                    text = if (hasRecognizedFace) "AI Vision Aktif" else "Standby",
+                    text = if (hasRecognizedFace) "AI Vision Siap" else "Standby",
                     fontSize = 11.sp,
                     color = CyanNeon
                 )

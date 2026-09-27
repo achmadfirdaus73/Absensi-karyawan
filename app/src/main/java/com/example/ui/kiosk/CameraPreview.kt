@@ -10,7 +10,6 @@ import androidx.annotation.OptIn
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ExperimentalGetImage
 import androidx.camera.core.ImageAnalysis
-import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
@@ -43,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import com.example.biometrics.HandGestureDetector
 import com.example.data.model.GestureType
 import com.example.ui.theme.CyanNeon
 import com.example.ui.theme.EmeraldSuccess
@@ -101,6 +101,8 @@ fun CameraPreview(
         FaceDetection.getClient(options)
     }
 
+    val gestureDetector = remember { HandGestureDetector() }
+
     LaunchedEffect(Unit) {
         if (!hasCameraPermission) {
             permissionLauncher.launch(Manifest.permission.CAMERA)
@@ -155,9 +157,6 @@ fun CameraPreview(
                                     .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                                     .build()
 
-                                var thumbStreak = 0
-                                var palmStreak = 0
-
                                 imageAnalysis.setAnalyzer(cameraExecutor) { imageProxy ->
                                     val mediaImage = imageProxy.image
                                     if (mediaImage != null) {
@@ -170,54 +169,15 @@ fun CameraPreview(
                                             .addOnSuccessListener { faces ->
                                                 if (faces.isNotEmpty()) {
                                                     val face = faces[0]
-                                                    val faceBounds = face.boundingBox
-
-                                                    // Real Human Face Confirmed!
-                                                    // Now analyze hand gesture from frame pixel distribution
-                                                    val planes = imageProxy.planes
-                                                    var detectedGesture: GestureType? = null
-
-                                                    if (planes.isNotEmpty()) {
-                                                        val buffer = planes[0].buffer
-                                                        val data = ByteArray(buffer.remaining().coerceAtMost(4096))
-                                                        buffer.get(data)
-
-                                                        // Check hand quadrant (side of face)
-                                                        var sideLum = 0L
-                                                        var count = 0
-                                                        for (i in (data.size / 2) until data.size step 8) {
-                                                            sideLum += (data[i].toInt() and 0xFF)
-                                                            count++
-                                                        }
-                                                        val avgSide = if (count > 0) sideLum / count else 0
-
-                                                        // Heuristic for stable gesture (requires at least 3 continuous frames to avoid any glitch)
-                                                        if (avgSide in 90..160) {
-                                                            thumbStreak++
-                                                            palmStreak = 0
-                                                            if (thumbStreak >= 3) {
-                                                                detectedGesture = GestureType.THUMBS_UP
-                                                            }
-                                                        } else if (avgSide > 160) {
-                                                            palmStreak++
-                                                            thumbStreak = 0
-                                                            if (palmStreak >= 3) {
-                                                                detectedGesture = GestureType.OPEN_HAND
-                                                            }
-                                                        } else {
-                                                            thumbStreak = 0
-                                                            palmStreak = 0
-                                                        }
-                                                    }
-
+                                                    val detectedGesture = gestureDetector.analyzeFrame(imageProxy, face.boundingBox)
                                                     onVisionEvent(true, detectedGesture)
                                                 } else {
-                                                    thumbStreak = 0
-                                                    palmStreak = 0
+                                                    gestureDetector.reset()
                                                     onVisionEvent(false, null)
                                                 }
                                             }
                                             .addOnFailureListener {
+                                                gestureDetector.reset()
                                                 onVisionEvent(false, null)
                                             }
                                             .addOnCompleteListener {

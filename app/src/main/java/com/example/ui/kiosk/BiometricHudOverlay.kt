@@ -49,14 +49,14 @@ fun BiometricHudOverlay(
     modifier: Modifier = Modifier
 ) {
     Box(modifier = modifier.fillMaxSize()) {
-        // ONLY the Detected Employee Badge appears at the bottom when a face is detected
+        // ONLY the Detected Employee Badge appears when a face is detected (Zero buttons)
         AnimatedVisibility(
             visible = recognizedEmployee != null,
-            enter = fadeIn() + slideInVertically(initialOffsetY = { it }),
-            exit = fadeOut() + slideOutVertically(targetOffsetY = { it }),
+            enter = fadeIn() + slideInVertically(initialOffsetY = { it / 2 }),
+            exit = fadeOut() + slideOutVertically(targetOffsetY = { it / 2 }),
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = 20.dp, start = 16.dp, end = 16.dp)
+                .padding(bottom = 24.dp, start = 16.dp, end = 16.dp)
         ) {
             if (recognizedEmployee != null) {
                 Surface(
@@ -70,7 +70,7 @@ fun BiometricHudOverlay(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        // Employee Info Row
+                        // Employee Info Row (Photo + Name + Department)
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(14.dp)
@@ -119,7 +119,7 @@ fun BiometricHudOverlay(
                             }
                         }
 
-                        // Subtle instruction badge
+                        // Real-time Gestures Guide / Detection Status Badge
                         Surface(
                             shape = RoundedCornerShape(10.dp),
                             color = Color(0xFF1E293B)
@@ -128,12 +128,12 @@ fun BiometricHudOverlay(
                                 text = when (activeGesture) {
                                     GestureType.THUMBS_UP -> "👍 Gestur Jempol Terdeteksi • Memproses Masuk..."
                                     GestureType.OPEN_HAND -> "🖐️ Gestur 5 Jari Terdeteksi • Memproses Pulang..."
-                                    else -> "Posisikan Wajah • Berikan 👍 Masuk atau 🖐️ Pulang"
+                                    else -> "Posisikan Wajah • Acungkan 👍 Masuk / 🖐️ Pulang"
                                 },
                                 color = if (activeGesture != null) EmeraldSuccess else Color(0xFF94A3B8),
                                 fontSize = 11.sp,
                                 fontWeight = if (activeGesture != null) FontWeight.Bold else FontWeight.Normal,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
                             )
                         }
                     }
