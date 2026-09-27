@@ -11,17 +11,15 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -46,6 +44,7 @@ import com.example.ui.theme.EmeraldSuccess
 fun BiometricHudOverlay(
     recognizedEmployee: Employee?,
     activeGesture: GestureType?,
+    countdownProgress: Float = 0f,
     modifier: Modifier = Modifier
 ) {
     Box(modifier = modifier.fillMaxSize()) {
@@ -70,16 +69,17 @@ fun BiometricHudOverlay(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        // Employee Info Row (Photo + Name + Department)
+                        // Employee Info Row (Photo + Name + Department + Progress Ring)
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(14.dp)
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .size(48.dp)
+                                    .size(52.dp)
                                     .clip(CircleShape)
-                                    .border(2.dp, CyanNeon, CircleShape)
+                                    .border(2.dp, CyanNeon, CircleShape),
+                                contentAlignment = Alignment.Center
                             ) {
                                 AsyncImage(
                                     model = ImageRequest.Builder(LocalContext.current)
@@ -90,6 +90,15 @@ fun BiometricHudOverlay(
                                     contentScale = ContentScale.Crop,
                                     modifier = Modifier.fillMaxSize()
                                 )
+
+                                if (countdownProgress > 0f) {
+                                    CircularProgressIndicator(
+                                        progress = { countdownProgress },
+                                        color = EmeraldSuccess,
+                                        strokeWidth = 3.dp,
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+                                }
                             }
 
                             Column {
@@ -125,14 +134,15 @@ fun BiometricHudOverlay(
                             color = Color(0xFF1E293B)
                         ) {
                             Text(
-                                text = when (activeGesture) {
-                                    GestureType.THUMBS_UP -> "👍 Gestur Jempol Terdeteksi • Memproses Masuk..."
-                                    GestureType.OPEN_HAND -> "🖐️ Gestur 5 Jari Terdeteksi • Memproses Pulang..."
-                                    else -> "Posisikan Wajah • Acungkan 👍 Masuk / 🖐️ Pulang"
+                                text = when {
+                                    activeGesture == GestureType.THUMBS_UP -> "👍 Gestur Jempol Terdeteksi • Memproses Masuk..."
+                                    activeGesture == GestureType.OPEN_HAND -> "🖐️ Gestur 5 Jari Terdeteksi • Memproses Pulang..."
+                                    countdownProgress > 0f -> "Memverifikasi Wajah... Tahan sebentar"
+                                    else -> "Wajah Terverifikasi • Acungkan 👍 Masuk / 🖐️ Pulang"
                                 },
-                                color = if (activeGesture != null) EmeraldSuccess else Color(0xFF94A3B8),
+                                color = if (activeGesture != null || countdownProgress > 0f) EmeraldSuccess else Color(0xFF94A3B8),
                                 fontSize = 11.sp,
-                                fontWeight = if (activeGesture != null) FontWeight.Bold else FontWeight.Normal,
+                                fontWeight = if (activeGesture != null || countdownProgress > 0f) FontWeight.Bold else FontWeight.Normal,
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
                             )
                         }

@@ -117,7 +117,8 @@ fun KioskScreen(
                 // ONLY the Detected Employee Badge appears when face is recognized (NO BUTTONS)
                 BiometricHudOverlay(
                     recognizedEmployee = currentEmployee,
-                    activeGesture = uiState.detectedGesture?.type
+                    activeGesture = uiState.detectedGesture?.type,
+                    countdownProgress = uiState.holdCountdownSec
                 )
 
                 // Subtle Camera Switcher Button (Top-Right)

@@ -2,13 +2,8 @@ package com.example.network
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
-import android.app.PendingIntent
 import android.content.Context
-import android.content.Intent
 import android.os.Build
-import android.util.Log
-import androidx.core.app.NotificationCompat
-import com.example.MainActivity
 import com.example.data.model.AttendanceRecord
 import com.example.data.model.AttendanceType
 import com.example.data.model.GestureType
@@ -21,7 +16,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import java.util.concurrent.TimeUnit
 
 class AdminNotificationDispatcher(private val context: Context) {
-    private val channelId = "admin_attendance_alerts"
+    private val channelId = "admin_attendance_alerts_silent"
     private val client = OkHttpClient.Builder()
         .connectTimeout(5, TimeUnit.SECONDS)
         .readTimeout(5, TimeUnit.SECONDS)
@@ -35,11 +30,12 @@ class AdminNotificationDispatcher(private val context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 channelId,
-                "Admin Attendance Alerts",
-                NotificationManager.IMPORTANCE_HIGH
+                "Admin Attendance Sync",
+                NotificationManager.IMPORTANCE_LOW // Low importance to prevent disruptive heads-up popups on camera
             ).apply {
-                description = "Notifikasi real-time presensi karyawan ke admin"
-                enableVibration(true)
+                description = "Sinkronisasi log presensi karyawan"
+                setShowBadge(false)
+                enableVibration(false)
             }
             val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             manager.createNotificationChannel(channel)
@@ -59,12 +55,8 @@ class AdminNotificationDispatcher(private val context: Context) {
         }
 
         val typeText = if (record.type == AttendanceType.CHECK_IN) "ABSEN MASUK" else "ABSEN PULANG"
-        val statusEmoji = if (record.punctualityStatus.name == "ON_TIME") "🟢" else "🟡"
 
-        // 1. Trigger Local Admin System Notification on Tablet / Device
-        showSystemNotification(record, typeText, gestureIcon)
-
-        // 2. Dispatch to Telegram Webhook / Cloud Alert Webhook
+        // Dispatch to Telegram Webhook / Cloud Alert Webhook if configured
         var webhookSuccess = false
         try {
             val jsonPayload = """
@@ -96,50 +88,12 @@ class AdminNotificationDispatcher(private val context: Context) {
                 webhookSuccess = response.isSuccessful
                 response.close()
             } else {
-                webhookSuccess = true // Local simulated success
+                webhookSuccess = true
             }
         } catch (e: Exception) {
-            Log.e("AdminNotification", "Webhook dispatch error: ${e.message}")
-            webhookSuccess = true // Keep robust for kiosk offline mode
+            webhookSuccess = false
         }
 
-        return@withContext webhookSuccess
-    }
-
-    private fun showSystemNotification(record: AttendanceRecord, typeText: String, gestureIcon: String) {
-        try {
-            val intent = Intent(context, MainActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-            }
-            val pendingIntent = PendingIntent.getActivity(
-                context,
-                record.id.toInt(),
-                intent,
-                PendingIntent.FLAG_IMMUTABLE
-            )
-
-            val notification = NotificationCompat.Builder(context, channelId)
-                .setSmallIcon(android.R.drawable.ic_dialog_info)
-                .setContentTitle("✅ Presensi $typeText: ${record.employeeName}")
-                .setContentText("${record.department} • Gestur: $gestureIcon • ${record.formattedTime}")
-                .setStyle(
-                    NotificationCompat.BigTextStyle()
-                        .bigText("Karyawan: ${record.employeeName} (${record.employeeCode})\n" +
-                                "Departemen: ${record.department}\n" +
-                                "Jenis: $typeText | Gestur: $gestureIcon\n" +
-                                "Waktu: ${record.formattedDate} - ${record.formattedTime}\n" +
-                                "Lokasi: ${record.locationAddress} (${record.latitude}, ${record.longitude})\n" +
-                                "Status: ${record.punctualityStatus.name} • Cloud Synced")
-                )
-                .setPriority(NotificationCompat.PRIORITY_HIGH)
-                .setAutoCancel(true)
-                .setContentIntent(pendingIntent)
-                .build()
-
-            val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            manager.notify(record.id.toInt(), notification)
-        } catch (e: Exception) {
-            Log.e("AdminNotification", "Failed to show local notification", e)
-        }
+        webhookSuccess
     }
 }

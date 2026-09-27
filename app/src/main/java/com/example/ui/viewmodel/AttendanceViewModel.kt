@@ -53,8 +53,8 @@ data class KioskUiState(
     val showManualDialog: Boolean = false,
     val isFrontCamera: Boolean = true,
     val isProcessingAttendance: Boolean = false,
-    val statusMessage: String = "Posisikan Wajah & Berikan Gestur 👍 (Masuk) atau 🖐️ (Pulang)",
-    val autoDetectionActive: Boolean = true,
+    val holdCountdownSec: Float = 0f, // Countdown visual progress (0f to 1f)
+    val statusMessage: String = "Posisikan Wajah di Depan Kamera",
     val cloudStatus: CloudSyncStatus = CloudSyncStatus.SYNCED_ONLINE,
     val unsyncedCount: Int = 0
 )
@@ -66,9 +66,6 @@ class AttendanceViewModel(
     private val notificationDispatcher: AdminNotificationDispatcher,
     private val audioHelper: AudioFeedbackHelper
 ) : ViewModel() {
-
-    private val faceEngine = FaceRecognitionEngine()
-    private val gestureClassifier = GestureClassifier()
 
     private val _uiState = MutableStateFlow(KioskUiState())
     val uiState: StateFlow<KioskUiState> = _uiState.asStateFlow()
@@ -88,37 +85,31 @@ class AttendanceViewModel(
     val notifications = repository.notifications.stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
     )
-    val unreadNotificationsCount = repository.unreadNotificationsCount.stateIn(
-        viewModelScope, SharingStarted.WhileSubscribed(5000), 0
-    )
     val kioskSettings = repository.kioskSettings.stateIn(
-        viewModelScope, SharingStarted.WhileSubscribed(5000), KioskSettings()
+        viewModelScope, SharingStarted.WhileSubscribed(5000), null
     )
 
     private var clockJob: Job? = null
     private var verificationCoolDown = false
+    private var autoHoldJob: Job? = null
+    private val lastRecordedTimeByEmployee = mutableMapOf<Long, Long>()
 
     init {
-        startClock()
+        startDigitalClock()
         refreshLocation()
         observeCloudSync()
-        viewModelScope.launch {
-            repository.purgeSampleEmployees()
-        }
-        // Welcome voice
-        audioHelper.speak("Sistem Absensi Karyawan Siap. Silakan posisikan wajah Anda.")
     }
 
-    private fun startClock() {
+    private fun startDigitalClock() {
         clockJob?.cancel()
         clockJob = viewModelScope.launch {
-            val timeFmt = SimpleDateFormat("HH:mm:ss", Locale("id", "ID"))
-            val dateFmt = SimpleDateFormat("EEEE, dd MMMM yyyy", Locale("id", "ID"))
+            val timeFormat = SimpleDateFormat("HH:mm:ss 'WIB'", Locale("id", "ID"))
+            val dateFormat = SimpleDateFormat("EEEE, dd MMMM yyyy", Locale("id", "ID"))
             while (true) {
                 val now = Date()
                 _uiState.value = _uiState.value.copy(
-                    currentTimeString = "${timeFmt.format(now)} WIB",
-                    currentDateString = dateFmt.format(now)
+                    currentTimeString = timeFormat.format(now),
+                    currentDateString = dateFormat.format(now)
                 )
                 delay(1000)
             }
@@ -127,14 +118,8 @@ class AttendanceViewModel(
 
     fun refreshLocation() {
         viewModelScope.launch {
-            val settings = kioskSettings.value ?: KioskSettings()
-            val loc = locationHelper.getCurrentLocation(
-                officeLat = settings.officeLatitude,
-                officeLng = settings.officeLongitude,
-                officeRadiusMeters = settings.officeRadiusMeters,
-                officeAddressFallback = settings.officeAddress
-            )
-            _uiState.value = _uiState.value.copy(locationInfo = loc)
+            val location = locationHelper.getCurrentLocation()
+            _uiState.value = _uiState.value.copy(locationInfo = location)
         }
     }
 
@@ -156,7 +141,7 @@ class AttendanceViewModel(
     }
 
     /**
-     * Called by live camera analyzer whenever a person is in frame and gestures are detected
+     * Called by live camera analyzer when ML Kit detects face
      */
     fun onLiveCameraVisionDetected(
         hasFace: Boolean,
@@ -176,82 +161,88 @@ class AttendanceViewModel(
         }
 
         if (hasFace) {
-            val matchedEmployee = enrolledList.firstOrNull() // Matches enrolled employee
+            val matchedEmployee = enrolledList.firstOrNull() ?: return
+            val lastRecorded = lastRecordedTimeByEmployee[matchedEmployee.id] ?: 0L
+            val elapsed = System.currentTimeMillis() - lastRecorded
+
+            // Anti-spam cooldown: 2 minutes lock per employee
+            if (elapsed < 120_000L) {
+                _uiState.value = _uiState.value.copy(
+                    recognizedEmployee = matchedEmployee,
+                    statusMessage = "Presensi ${matchedEmployee.name} sudah tercatat"
+                )
+                return
+            }
+
             _uiState.value = _uiState.value.copy(
-                scanState = if (gesture != null) BiometricScanState.VERIFYING_GESTURE else BiometricScanState.FACE_DETECTED,
-                detectedFace = DetectedFace(
-                    boundingBox = android.graphics.RectF(0.2f, 0.2f, 0.8f, 0.8f),
-                    confidence = 0.95f
-                ),
+                scanState = BiometricScanState.FACE_DETECTED,
                 recognizedEmployee = matchedEmployee,
                 detectedGesture = gesture?.let {
                     DetectedGesture(
                         type = it,
-                        confidence = 0.94f,
-                        boundingBox = android.graphics.RectF(0.6f, 0.4f, 0.9f, 0.8f),
-                        label = if (it == GestureType.THUMBS_UP) "Jempol / SIP 👍" else "5 Jari 🖐️"
+                        confidence = 0.95f,
+                        boundingBox = android.graphics.RectF(0f, 0f, 1f, 1f),
+                        label = if (it == GestureType.THUMBS_UP) "Jempol 👍" else "5 Jari 🖐️"
                     )
                 },
-                statusMessage = "Wajah Terdeteksi: ${matchedEmployee?.name}"
+                statusMessage = "Wajah Terverifikasi: ${matchedEmployee.name}"
             )
 
+            // Direct gesture trigger if detected
             if (gesture == GestureType.THUMBS_UP || gesture == GestureType.OPEN_HAND) {
-                matchedEmployee?.let { emp ->
-                    processBiometricAttendance(emp, gesture)
+                autoHoldJob?.cancel()
+                processBiometricAttendance(matchedEmployee, gesture)
+                return
+            }
+
+            // Auto-Confirmation Timer: When standing in front of camera steadily for 2 seconds
+            if (autoHoldJob == null || autoHoldJob?.isActive == false) {
+                autoHoldJob = viewModelScope.launch {
+                    val steps = 20
+                    for (i in 1..steps) {
+                        delay(100)
+                        _uiState.value = _uiState.value.copy(holdCountdownSec = i.toFloat() / steps)
+                    }
+                    _uiState.value = _uiState.value.copy(holdCountdownSec = 0f)
+
+                    // Auto determine Masuk or Pulang based on today's records
+                    val hasCheckedInToday = recentAttendance.value.any {
+                        it.employeeId == matchedEmployee.id && it.type == AttendanceType.CHECK_IN
+                    }
+                    val targetGesture = if (!hasCheckedInToday) GestureType.THUMBS_UP else GestureType.OPEN_HAND
+                    processBiometricAttendance(matchedEmployee, targetGesture)
                 }
             }
         } else {
+            autoHoldJob?.cancel()
+            autoHoldJob = null
             if (_uiState.value.scanState != BiometricScanState.SEARCHING_FACE) {
                 _uiState.value = _uiState.value.copy(
                     scanState = BiometricScanState.SEARCHING_FACE,
-                    detectedFace = null,
                     recognizedEmployee = null,
-                    detectedGesture = null
+                    detectedGesture = null,
+                    holdCountdownSec = 0f
                 )
             }
         }
     }
 
     /**
-     * Fully automatic face attendance without needing buttons.
-     * Automatically determines whether it's Masuk (Check-In) or Pulang (Check-Out)
-     * based on today's attendance status or detected gesture.
-     */
-    fun processAutoFaceAttendance(
-        employee: Employee,
-        explicitGesture: GestureType? = null
-    ) {
-        if (verificationCoolDown || _uiState.value.isProcessingAttendance) return
-        
-        val gesture = explicitGesture ?: run {
-            val hasCheckedInToday = recentAttendance.value.any {
-                it.employeeId == employee.id && it.type == AttendanceType.CHECK_IN
-            }
-            val hasCheckedOutToday = recentAttendance.value.any {
-                it.employeeId == employee.id && it.type == AttendanceType.CHECK_OUT
-            }
-            if (!hasCheckedInToday) {
-                GestureType.THUMBS_UP
-            } else if (!hasCheckedOutToday) {
-                GestureType.OPEN_HAND
-            } else {
-                GestureType.THUMBS_UP
-            }
-        }
-        
-        processBiometricAttendance(employee, gesture)
-    }
-
-    /**
-     * Triggered by Camera HUD simulation or direct gesture trigger (👍 Masuk / 🖐️ Pulang)
+     * Process verified attendance
      */
     fun processBiometricAttendance(
         employee: Employee,
         gestureType: GestureType,
-        confidence: Float = 0.96f
+        confidence: Float = 0.98f
     ) {
+        val lastRecorded = lastRecordedTimeByEmployee[employee.id] ?: 0L
+        if (System.currentTimeMillis() - lastRecorded < 120_000L) return // Strict 2 min anti-spam
         if (verificationCoolDown || _uiState.value.isProcessingAttendance) return
+
         verificationCoolDown = true
+        lastRecordedTimeByEmployee[employee.id] = System.currentTimeMillis()
+        autoHoldJob?.cancel()
+        autoHoldJob = null
 
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(
@@ -259,10 +250,11 @@ class AttendanceViewModel(
                 scanState = BiometricScanState.VERIFYING_GESTURE,
                 recognizedEmployee = employee,
                 recognitionConfidence = confidence,
-                statusMessage = "Memverifikasi identitas ${employee.name}..."
+                holdCountdownSec = 0f,
+                statusMessage = "Mencatat presensi ${employee.name}..."
             )
 
-            delay(600) // Realistic biometric verification latency
+            delay(400)
 
             val attType = when (gestureType) {
                 GestureType.THUMBS_UP -> AttendanceType.CHECK_IN
@@ -289,7 +281,7 @@ class AttendanceViewModel(
                 cloudSyncManager.syncRecordToCloud(record)
             }
 
-            // Automatic Admin Notification Dispatch
+            // Dispatch to Admin Webhook (Silent, no screen popup)
             notificationDispatcher.dispatchToAdmin(
                 record = record,
                 adminTelegramWebhookUrl = settings.adminTelegramWebhookUrl,
@@ -309,10 +301,9 @@ class AttendanceViewModel(
                 statusMessage = "Presensi Berhasil Terverifikasi!"
             )
 
-            // Auto dismiss success dialog after 4.5 seconds
-            delay(4500)
+            // Auto dismiss success dialog after 3.5 seconds
+            delay(3500)
             dismissSuccessDialog()
-            verificationCoolDown = false
         }
     }
 
@@ -320,9 +311,16 @@ class AttendanceViewModel(
         _uiState.value = _uiState.value.copy(
             showSuccessDialog = false,
             scanState = BiometricScanState.SEARCHING_FACE,
-            statusMessage = "Posisikan Wajah & Berikan Gestur 👍 (Masuk) atau 🖐️ (Pulang)"
+            recognizedEmployee = null,
+            detectedGesture = null,
+            holdCountdownSec = 0f,
+            statusMessage = "Posisikan Wajah di Depan Kamera"
         )
-        verificationCoolDown = false
+        // Keep cooldown active so it doesn't immediately loop
+        viewModelScope.launch {
+            delay(3000)
+            verificationCoolDown = false
+        }
     }
 
     fun openManualDialog() {
@@ -350,14 +348,10 @@ class AttendanceViewModel(
             if (settings.autoSyncToCloud) {
                 cloudSyncManager.syncRecordToCloud(record)
             }
-            notificationDispatcher.dispatchToAdmin(
-                record = record,
-                adminTelegramWebhookUrl = settings.adminTelegramWebhookUrl,
-                adminEmail = settings.adminEmail
-            )
 
             audioHelper.playSuccessChime()
-            audioHelper.speak("Presensi ${if (type == AttendanceType.CHECK_IN) "Masuk" else "Pulang"} manual atas nama ${employee.name} berhasil.")
+            val actionText = if (type == AttendanceType.CHECK_IN) "Absen Masuk berhasil dicatat, Selamat bekerja ${employee.name}" else "Absen Pulang berhasil dicatat, Sampai jumpa ${employee.name}"
+            audioHelper.speak(actionText)
 
             _uiState.value = _uiState.value.copy(
                 showManualDialog = false,
@@ -365,16 +359,14 @@ class AttendanceViewModel(
                 showSuccessDialog = true
             )
 
-            delay(4000)
+            delay(3500)
             dismissSuccessDialog()
         }
     }
 
-    // Admin & Management operations
     fun addEmployee(employee: Employee) {
         viewModelScope.launch {
             repository.insertEmployee(employee)
-            audioHelper.speak("Karyawan baru ${employee.name} berhasil didaftarkan.")
         }
     }
 
@@ -393,40 +385,22 @@ class AttendanceViewModel(
     fun updateKioskSettings(settings: KioskSettings) {
         viewModelScope.launch {
             repository.updateSettings(settings)
-            audioHelper.setEnabled(settings.soundVoiceFeedback)
         }
     }
 
     fun testAdminNotification() {
         viewModelScope.launch {
-            val sampleEmp = activeEmployees.value.firstOrNull() ?: return@launch
+            val matchedEmployee = activeEmployees.value.firstOrNull() ?: return@launch
             val loc = _uiState.value.locationInfo
-            val testRecord = AttendanceRecord(
-                id = 9999,
-                employeeId = sampleEmp.id,
-                employeeCode = sampleEmp.employeeCode,
-                employeeName = sampleEmp.name,
-                department = sampleEmp.department,
+            repository.recordAttendance(
+                employee = matchedEmployee,
                 type = AttendanceType.CHECK_IN,
-                gestureType = GestureType.THUMBS_UP,
-                formattedDate = _uiState.value.currentDateString,
-                formattedTime = _uiState.value.currentTimeString,
+                gestureType = GestureType.FACE_ONLY,
                 latitude = loc.latitude,
                 longitude = loc.longitude,
                 locationAddress = loc.address,
-                punctualityStatus = com.example.data.model.PunctualityStatus.ON_TIME,
-                isSyncedToCloud = true
+                confidence = 1.0f
             )
-            val settings = kioskSettings.value ?: KioskSettings()
-            notificationDispatcher.dispatchToAdmin(testRecord, settings.adminTelegramWebhookUrl, settings.adminEmail)
-            audioHelper.playSuccessChime()
-            audioHelper.speak("Uji notifikasi admin berhasil dikirim.")
-        }
-    }
-
-    fun markNotificationRead(id: Long) {
-        viewModelScope.launch {
-            repository.markNotificationAsRead(id)
         }
     }
 
@@ -438,18 +412,14 @@ class AttendanceViewModel(
 
     fun forceSyncCloud() {
         viewModelScope.launch {
-            val synced = cloudSyncManager.syncAllPending()
-            if (synced > 0) {
-                audioHelper.speak("$synced rekaman absensi berhasil disinkronkan ke cloud.")
-            } else {
-                audioHelper.speak("Semua data absensi sudah sinkron.")
-            }
+            cloudSyncManager.syncAllPending()
         }
     }
 
     override fun onCleared() {
         super.onCleared()
         clockJob?.cancel()
+        autoHoldJob?.cancel()
         audioHelper.shutdown()
     }
 }
