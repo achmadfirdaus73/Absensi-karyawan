@@ -23,27 +23,34 @@ jobs:
           distribution: 'temurin'
           cache: gradle
 
-      - name: Prepare Environment Files
+      - name: Prepare Keystore & Environment Files
         run: |
+          # Ensure .env exists
           if [ ! -f .env ]; then
-            cp .env.example .env
+            if [ -f .env.example ]; then
+              cp .env.example .env
+            else
+              touch .env
+            fi
           fi
-          if [ -f debug.keystore.base64 ] && [ ! -f debug.keystore ]; then
-            base64 -d debug.keystore.base64 > debug.keystore
+
+          # Ensure debug.keystore exists
+          if [ -f debug.keystore.base64 ] && [ ! -s debug.keystore ]; then
+            base64 -d debug.keystore.base64 > debug.keystore || true
+          fi
+          
+          if [ ! -f debug.keystore ] || [ ! -s debug.keystore ]; then
+            keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
           fi
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
       - name: Grant Execute Permission to Gradlew
-        run: |
-          if [ ! -f ./gradlew ]; then
-            gradle wrapper
-          fi
-          chmod +x ./gradlew
+        run: chmod +x ./gradlew
 
       - name: Build Debug APK
-        run: ./gradlew assembleDebug --stacktrace
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
 
       - name: Upload SmartPresensi APK Artifact
         uses: actions/upload-artifact@v4
