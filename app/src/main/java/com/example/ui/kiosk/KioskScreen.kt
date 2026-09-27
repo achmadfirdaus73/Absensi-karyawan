@@ -20,8 +20,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.CheckCircle
@@ -108,41 +110,39 @@ fun KioskScreen(
             .fillMaxSize()
             .background(KioskDarkBackground)
     ) {
-        val isWideScreen = maxWidth > 760.dp
+        val isWideScreen = maxWidth > 720.dp
 
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp)
-        ) {
-            // 1. Top Kiosk Wall Header Bar
-            KioskTopHeaderBar(
-                timeString = uiState.currentTimeString,
-                dateString = uiState.currentDateString,
-                companyName = kioskSettings?.companyName ?: "PT DIGITAL NUSANTARA UTAMA",
-                kioskName = kioskSettings?.kioskName ?: "Kiosk Dinding Lobby",
-                locationAddress = uiState.locationInfo.address,
-                isGeofenceOk = uiState.locationInfo.isWithinOfficeGeofence,
-                cloudStatus = uiState.cloudStatus,
-                onOpenAdmin = onOpenAdmin,
-                onRefreshLocation = { viewModel.refreshLocation() }
-            )
+        if (isWideScreen) {
+            // WIDE TABLET LANDSCAPE LAYOUT
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp)
+            ) {
+                KioskTopHeaderBar(
+                    timeString = uiState.currentTimeString,
+                    dateString = uiState.currentDateString,
+                    companyName = kioskSettings?.companyName ?: "PT DIGITAL NUSANTARA UTAMA",
+                    kioskName = kioskSettings?.kioskName ?: "Wall Tablet Kiosk",
+                    locationAddress = uiState.locationInfo.address,
+                    isGeofenceOk = uiState.locationInfo.isWithinOfficeGeofence,
+                    cloudStatus = uiState.cloudStatus,
+                    onOpenAdmin = onOpenAdmin,
+                    onRefreshLocation = { viewModel.refreshLocation() }
+                )
 
-            Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(14.dp))
 
-            // 2. Main Content
-            if (isWideScreen) {
-                // Wide Tablet Layout (Side-by-Side: Camera/HUD on Left, Realtime Feed & Controls on Right)
                 Row(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    // Left Column: Live Camera + Biometric HUD + Quick Gesture Triggers
+                    // Left Column: Live Camera + Biometric HUD + Interactive Action Bar
                     Column(
                         modifier = Modifier
-                            .weight(1.3f)
+                            .weight(1.25f)
                             .fillMaxHeight(),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
@@ -164,7 +164,6 @@ fun KioskScreen(
                                 detectedGesture = uiState.detectedGesture
                             )
 
-                            // Quick Camera Lens Switcher Button
                             IconButton(
                                 onClick = { viewModel.toggleCamera() },
                                 modifier = Modifier
@@ -180,7 +179,6 @@ fun KioskScreen(
                             }
                         }
 
-                        // Employee Quick Biometric Selector & Action Buttons
                         EmployeeInteractiveActionBar(
                             employees = activeEmployees,
                             selectedEmployee = selectedSimEmployee ?: activeEmployees.firstOrNull(),
@@ -196,10 +194,10 @@ fun KioskScreen(
                         )
                     }
 
-                    // Right Column: Live Attendance Feed & Summary Stats
+                    // Right Column: Summary Stats & Recent Attendance Feed
                     Column(
                         modifier = Modifier
-                            .weight(0.9f)
+                            .weight(0.95f)
                             .fillMaxHeight(),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
@@ -211,52 +209,90 @@ fun KioskScreen(
                         )
                     }
                 }
-            } else {
-                // Handheld / Compact Layout
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(300.dp)
-                            .clip(RoundedCornerShape(20.dp))
-                            .border(1.5.dp, KioskCardBorder, RoundedCornerShape(20.dp))
-                    ) {
-                        CameraPreview(
-                            isFrontCamera = uiState.isFrontCamera,
-                            modifier = Modifier.fillMaxSize()
-                        )
+            }
+        } else {
+            // VERTICAL / PHONE / PORTRAIT SCROLLABLE LAYOUT
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                // Responsive Header for phone screens
+                KioskMobileHeaderBar(
+                    timeString = uiState.currentTimeString,
+                    dateString = uiState.currentDateString,
+                    companyName = kioskSettings?.companyName ?: "PT DIGITAL NUSANTARA UTAMA",
+                    kioskName = kioskSettings?.kioskName ?: "Wall Tablet Kiosk",
+                    locationAddress = uiState.locationInfo.address,
+                    isGeofenceOk = uiState.locationInfo.isWithinOfficeGeofence,
+                    cloudStatus = uiState.cloudStatus,
+                    onOpenAdmin = onOpenAdmin
+                )
 
-                        BiometricHudOverlay(
-                            scanState = uiState.scanState,
-                            recognizedEmployee = uiState.recognizedEmployee ?: selectedSimEmployee,
-                            detectedGesture = uiState.detectedGesture
+                // Camera Viewport & HUD Scanner
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(280.dp)
+                        .clip(RoundedCornerShape(20.dp))
+                        .border(1.5.dp, KioskCardBorder, RoundedCornerShape(20.dp))
+                ) {
+                    CameraPreview(
+                        isFrontCamera = uiState.isFrontCamera,
+                        modifier = Modifier.fillMaxSize()
+                    )
+
+                    BiometricHudOverlay(
+                        scanState = uiState.scanState,
+                        recognizedEmployee = uiState.recognizedEmployee ?: selectedSimEmployee,
+                        detectedGesture = uiState.detectedGesture
+                    )
+
+                    IconButton(
+                        onClick = { viewModel.toggleCamera() },
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(10.dp)
+                            .background(Color(0xAA0F172A), CircleShape)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.FlipCameraAndroid,
+                            contentDescription = "Ganti Kamera",
+                            tint = CyanNeon,
+                            modifier = Modifier.size(20.dp)
                         )
                     }
-
-                    EmployeeInteractiveActionBar(
-                        employees = activeEmployees,
-                        selectedEmployee = selectedSimEmployee ?: activeEmployees.firstOrNull(),
-                        onSelectEmployee = { selectedSimEmployee = it },
-                        onCheckInThumbsUp = { emp ->
-                            viewModel.processBiometricAttendance(emp, GestureType.THUMBS_UP)
-                        },
-                        onCheckOut5Fingers = { emp ->
-                            viewModel.processBiometricAttendance(emp, GestureType.OPEN_HAND)
-                        },
-                        onManualAttendance = { viewModel.openManualDialog() },
-                        isProcessing = uiState.isProcessingAttendance
-                    )
-
-                    RecentAttendanceFeedCard(
-                        recentAttendance = recentAttendance,
-                        modifier = Modifier.weight(1f)
-                    )
                 }
+
+                // Interactive Employee Selector & Realtime Buttons (Masuk 👍 & Pulang 🖐️)
+                EmployeeInteractiveActionBar(
+                    employees = activeEmployees,
+                    selectedEmployee = selectedSimEmployee ?: activeEmployees.firstOrNull(),
+                    onSelectEmployee = { selectedSimEmployee = it },
+                    onCheckInThumbsUp = { emp ->
+                        viewModel.processBiometricAttendance(emp, GestureType.THUMBS_UP)
+                    },
+                    onCheckOut5Fingers = { emp ->
+                        viewModel.processBiometricAttendance(emp, GestureType.OPEN_HAND)
+                    },
+                    onManualAttendance = { viewModel.openManualDialog() },
+                    isProcessing = uiState.isProcessingAttendance
+                )
+
+                // Stats Cards
+                AttendanceSummaryStatsCards(recentAttendance = recentAttendance)
+
+                // Recent Attendance List (Fixed height scrollable container on phone)
+                RecentAttendanceFeedCard(
+                    recentAttendance = recentAttendance,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(300.dp)
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
             }
         }
 
@@ -276,6 +312,159 @@ fun KioskScreen(
                 },
                 onDismiss = { viewModel.closeManualDialog() }
             )
+        }
+    }
+}
+
+@Composable
+fun KioskMobileHeaderBar(
+    timeString: String,
+    dateString: String,
+    companyName: String,
+    kioskName: String,
+    locationAddress: String,
+    isGeofenceOk: Boolean,
+    cloudStatus: CloudSyncStatus,
+    onOpenAdmin: () -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = KioskDarkSurface,
+        shape = RoundedCornerShape(18.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, KioskCardBorder)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            // Top Row: Brand & Admin Button
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(38.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(CyanNeon.copy(alpha = 0.2f))
+                            .border(1.dp, CyanNeon, RoundedCornerShape(10.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Security,
+                            contentDescription = "Logo",
+                            tint = CyanNeon,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+
+                    Column {
+                        Text(
+                            text = companyName,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                        Text(
+                            text = kioskName,
+                            fontSize = 11.sp,
+                            color = Color(0xFF94A3B8)
+                        )
+                    }
+                }
+
+                Surface(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable { onOpenAdmin() },
+                    color = Color(0xFF1E293B),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF334155))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.AdminPanelSettings,
+                            contentDescription = "Admin",
+                            tint = CyanNeon,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = "Admin",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                    }
+                }
+            }
+
+            // Bottom Row: Clock + Location Tag + Cloud Sync Pill
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = timeString,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = CyanNeonLight,
+                        fontFamily = FontFamily.Monospace
+                    )
+                    Text(
+                        text = dateString,
+                        fontSize = 11.sp,
+                        color = Color(0xFF94A3B8)
+                    )
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = when (cloudStatus) {
+                        CloudSyncStatus.SYNCED_ONLINE -> EmeraldSuccess.copy(alpha = 0.15f)
+                        CloudSyncStatus.SYNCING -> CyanNeon.copy(alpha = 0.15f)
+                        else -> AmberCheckout.copy(alpha = 0.15f)
+                    },
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.dp,
+                        when (cloudStatus) {
+                            CloudSyncStatus.SYNCED_ONLINE -> EmeraldSuccess.copy(alpha = 0.4f)
+                            CloudSyncStatus.SYNCING -> CyanNeon.copy(alpha = 0.4f)
+                            else -> AmberCheckout.copy(alpha = 0.4f)
+                        }
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CloudDone,
+                            contentDescription = "Cloud",
+                            tint = if (cloudStatus == CloudSyncStatus.SYNCED_ONLINE) EmeraldSuccess else CyanNeon,
+                            modifier = Modifier.size(12.dp)
+                        )
+                        Text(
+                            text = if (cloudStatus == CloudSyncStatus.SYNCED_ONLINE) "Cloud Online" else "Syncing...",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color.White
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -308,7 +497,8 @@ fun KioskTopHeaderBar(
             // Company & Location Info
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(14.dp)
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                modifier = Modifier.weight(1f, fill = false)
             ) {
                 Box(
                     modifier = Modifier
@@ -471,14 +661,14 @@ fun EmployeeInteractiveActionBar(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "👤 Karyawan Didepan Kamera (Biometrik Wajah):",
+                    text = "👤 Karyawan di Depan Kamera (Wajah):",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = Color(0xFF94A3B8)
                 )
 
                 Text(
-                    text = "Pilih untuk simulasi deteksi",
+                    text = "Klik nama untuk pilih",
                     fontSize = 11.sp,
                     color = CyanNeon
                 )
@@ -554,24 +744,24 @@ fun EmployeeInteractiveActionBar(
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.ThumbUp,
                             contentDescription = "Jempol",
                             tint = Color.Black,
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(18.dp)
                         )
                         Column(horizontalAlignment = Alignment.Start) {
                             Text(
-                                text = "ABSEN MASUK (👍 SIP)",
-                                fontSize = 13.sp,
+                                text = "MASUK (👍 SIP)",
+                                fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.Black
                             )
                             Text(
-                                text = "Wajah + Gestur Jempol",
-                                fontSize = 10.sp,
+                                text = "Wajah + Jempol",
+                                fontSize = 9.sp,
                                 color = Color(0xFF064E3B)
                             )
                         }
@@ -595,24 +785,24 @@ fun EmployeeInteractiveActionBar(
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.PanTool,
                             contentDescription = "5 Jari",
                             tint = Color.Black,
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(18.dp)
                         )
                         Column(horizontalAlignment = Alignment.Start) {
                             Text(
-                                text = "ABSEN PULANG (🖐️ 5 JARI)",
-                                fontSize = 13.sp,
+                                text = "PULANG (🖐️ 5 JARI)",
+                                fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.Black
                             )
                             Text(
-                                text = "Wajah + Telapak Terbuka",
-                                fontSize = 10.sp,
+                                text = "Wajah + 5 Jari",
+                                fontSize = 9.sp,
                                 color = Color(0xFF78350F)
                             )
                         }
@@ -656,17 +846,17 @@ fun AttendanceSummaryStatsCards(recentAttendance: List<AttendanceRecord>) {
             border = androidx.compose.foundation.BorderStroke(1.dp, EmeraldSuccess.copy(alpha = 0.3f))
         ) {
             Column(
-                modifier = Modifier.padding(12.dp),
+                modifier = Modifier.padding(10.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(text = "Hadir Masuk", fontSize = 11.sp, color = Color(0xFF94A3B8))
                 Text(
                     text = "$checkIns",
-                    fontSize = 22.sp,
+                    fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
                     color = EmeraldSuccessLight
                 )
-                Text(text = "👍 Jempol Verified", fontSize = 9.sp, color = EmeraldSuccess)
+                Text(text = "👍 Verified", fontSize = 9.sp, color = EmeraldSuccess)
             }
         }
 
@@ -678,17 +868,17 @@ fun AttendanceSummaryStatsCards(recentAttendance: List<AttendanceRecord>) {
             border = androidx.compose.foundation.BorderStroke(1.dp, AmberCheckout.copy(alpha = 0.3f))
         ) {
             Column(
-                modifier = Modifier.padding(12.dp),
+                modifier = Modifier.padding(10.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(text = "Sudah Pulang", fontSize = 11.sp, color = Color(0xFF94A3B8))
                 Text(
                     text = "$checkOuts",
-                    fontSize = 22.sp,
+                    fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
                     color = AmberCheckoutLight
                 )
-                Text(text = "🖐️ 5 Jari Verified", fontSize = 9.sp, color = AmberCheckout)
+                Text(text = "🖐️ Verified", fontSize = 9.sp, color = AmberCheckout)
             }
         }
 
@@ -700,17 +890,17 @@ fun AttendanceSummaryStatsCards(recentAttendance: List<AttendanceRecord>) {
             border = androidx.compose.foundation.BorderStroke(1.dp, RoseError.copy(alpha = 0.3f))
         ) {
             Column(
-                modifier = Modifier.padding(12.dp),
+                modifier = Modifier.padding(10.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(text = "Terlambat", fontSize = 11.sp, color = Color(0xFF94A3B8))
                 Text(
                     text = "$lates",
-                    fontSize = 22.sp,
+                    fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
                     color = RoseError
                 )
-                Text(text = "> Jam Masuk", fontSize = 9.sp, color = Color(0xFFFDA4AF))
+                Text(text = "> Jam Shift", fontSize = 9.sp, color = Color(0xFFFDA4AF))
             }
         }
     }
@@ -730,7 +920,7 @@ fun RecentAttendanceFeedCard(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(16.dp)
+                .padding(14.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -748,7 +938,7 @@ fun RecentAttendanceFeedCard(
                             .background(EmeraldSuccess)
                     )
                     Text(
-                        text = "Live Log Presensi Hari Ini",
+                        text = "Live Log Presensi",
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White
@@ -768,7 +958,7 @@ fun RecentAttendanceFeedCard(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(20.dp),
+                        .padding(16.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -776,12 +966,12 @@ fun RecentAttendanceFeedCard(
                             imageVector = Icons.Default.Schedule,
                             contentDescription = null,
                             tint = Color(0xFF475569),
-                            modifier = Modifier.size(36.dp)
+                            modifier = Modifier.size(32.dp)
                         )
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(6.dp))
                         Text(
                             text = "Belum ada presensi hari ini",
-                            fontSize = 13.sp,
+                            fontSize = 12.sp,
                             color = Color(0xFF64748B)
                         )
                     }
