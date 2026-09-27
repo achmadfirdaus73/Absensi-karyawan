@@ -1,0 +1,6 @@
+{
+  "name": "SmartPresensi Kiosk",
+  "description": "Aplikasi Absensi Karyawan Tablet Dinding Real-time dengan Biometrik Wajah, Pengenalan Gestur (Jempol Masuk & 5 Jari Pulang), Notifikasi Otomatis Admin & Sinkronisasi Cloud GPS.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

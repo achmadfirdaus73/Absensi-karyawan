@@ -1,0 +1,12 @@
+<resources>
+    <string name="app_name">SmartPresensi Kiosk</string>
+    <string name="company_name">PT DIGITAL NUSANTARA UTAMA</string>
+    <string name="kiosk_location_default">Gedung Cyber Tower Lt. 12 - Lobby Utama</string>
+    <string name="status_online">Online • Cloud Terhubung</string>
+    <string name="status_offline">Offline • Mode Lokal</string>
+    <string name="action_checkin">ABSEN MASUK</string>
+    <string name="action_checkout">ABSEN PULANG</string>
+    <string name="gesture_hint_checkin">Tunjukkan Wajah + Gestur Jempol 👍 (SIP)</string>
+    <string name="gesture_hint_checkout">Tunjukkan Wajah + Gestur 5 Jari 🖐️ (Telapak Tangan Terbuka)</string>
+    <string name="admin_portal">Portal Admin &amp; Laporan</string>
+</resources>
