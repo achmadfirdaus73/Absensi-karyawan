@@ -21,14 +21,11 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.FlipCameraAndroid
 import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.PanTool
-import androidx.compose.material.icons.filled.ThumbUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -39,10 +36,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.example.biometrics.BiometricScanState
 import com.example.data.model.AttendanceRecord
 import com.example.data.model.AttendanceType
-import com.example.data.model.GestureType
 import com.example.network.CloudSyncStatus
 import com.example.ui.theme.AmberCheckout
 import com.example.ui.theme.CyanNeon
@@ -63,19 +58,6 @@ fun KioskScreen(
     val activeEmployees by viewModel.activeEmployees.collectAsStateWithLifecycle()
     val recentAttendance by viewModel.recentAttendance.collectAsStateWithLifecycle()
     val kioskSettings by viewModel.kioskSettings.collectAsStateWithLifecycle()
-
-    // The currently identified employee (strictly from real-time biometric face detection)
-    val recognizedEmp = uiState.recognizedEmployee ?: activeEmployees.firstOrNull()
-
-    // Trigger attendance when gesture is recognized
-    LaunchedEffect(uiState.detectedGesture, recognizedEmp, uiState.isProcessingAttendance, uiState.showSuccessDialog) {
-        val gesture = uiState.detectedGesture
-        if (recognizedEmp != null && gesture != null && !uiState.isProcessingAttendance && !uiState.showSuccessDialog) {
-            if (gesture.type == GestureType.THUMBS_UP || gesture.type == GestureType.OPEN_HAND) {
-                viewModel.processBiometricAttendance(recognizedEmp, gesture.type)
-            }
-        }
-    }
 
     Box(
         modifier = modifier
@@ -99,7 +81,7 @@ fun KioskScreen(
                 onOpenAdmin = onOpenAdmin
             )
 
-            // 2. MAIN FULLSTAGE CAMERA VIEWPORT (PURE BIOMETRIC & GESTURE ONLY)
+            // 2. MAIN FULLSTAGE CAMERA VIEWPORT (PURE VIDEO STREAM + DETECTED CARD ONLY)
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -107,20 +89,19 @@ fun KioskScreen(
                     .clip(RoundedCornerShape(24.dp))
                     .border(1.5.dp, KioskCardBorder, RoundedCornerShape(24.dp))
             ) {
-                // Live Hardware Camera with ImageAnalysis Real-Time Vision Pipeline
+                // Live Hardware Camera with Google ML Kit Face & Gesture Analyzer
                 CameraPreview(
                     isFrontCamera = uiState.isFrontCamera,
-                    onFrameVisionDetected = { hasFace, gesture ->
+                    onVisionEvent = { hasFace, gesture ->
                         viewModel.onLiveCameraVisionDetected(hasFace, gesture)
                     },
                     modifier = Modifier.fillMaxSize()
                 )
 
-                // Holographic Biometric Reticle HUD
+                // ONLY the Detected Employee Badge appears when face is recognized
                 BiometricHudOverlay(
-                    scanState = uiState.scanState,
-                    recognizedEmployee = recognizedEmp,
-                    detectedGesture = uiState.detectedGesture
+                    recognizedEmployee = uiState.recognizedEmployee,
+                    activeGesture = uiState.detectedGesture?.type
                 )
 
                 // Subtle Camera Switcher Button (Top-Right)
@@ -143,7 +124,8 @@ fun KioskScreen(
             // 3. MINIMALIST REAL-TIME ATTENDANCE TICKER (BOTTOM LOG)
             MinimalAttendanceTicker(
                 recentAttendance = recentAttendance,
-                hasEnrolledEmployees = activeEmployees.isNotEmpty()
+                hasEnrolledEmployees = activeEmployees.isNotEmpty(),
+                hasRecognizedFace = uiState.recognizedEmployee != null
             )
         }
 
@@ -294,7 +276,8 @@ fun MinimalKioskHeader(
 @Composable
 fun MinimalAttendanceTicker(
     recentAttendance: List<AttendanceRecord>,
-    hasEnrolledEmployees: Boolean
+    hasEnrolledEmployees: Boolean,
+    hasRecognizedFace: Boolean
 ) {
     val lastRecord = recentAttendance.firstOrNull()
 
@@ -357,17 +340,17 @@ fun MinimalAttendanceTicker(
                         modifier = Modifier
                             .size(8.dp)
                             .clip(CircleShape)
-                            .background(if (hasEnrolledEmployees) EmeraldSuccess else CyanNeon)
+                            .background(if (hasRecognizedFace) EmeraldSuccess else CyanNeon)
                     )
                     Text(
-                        text = if (hasEnrolledEmployees) "Kiosk Siap • Hadapkan Wajah & Gestur 👍 / 🖐️" else "Belum ada karyawan terdaftar • Buka Admin untuk menambah",
+                        text = if (hasRecognizedFace) "Wajah Terdeteksi • Berikan 👍 Masuk atau 🖐️ Pulang" else if (hasEnrolledEmployees) "Kamera Siap • Posisikan Wajah di Depan Kamera" else "Belum ada karyawan terdaftar • Buka Admin untuk menambah",
                         fontSize = 12.sp,
                         color = Color(0xFF94A3B8)
                     )
                 }
 
                 Text(
-                    text = if (hasEnrolledEmployees) "AI Biometrik Aktif" else "Daftarkan di Admin",
+                    text = if (hasRecognizedFace) "AI Vision Aktif" else "Standby",
                     fontSize = 11.sp,
                     color = CyanNeon
                 )
