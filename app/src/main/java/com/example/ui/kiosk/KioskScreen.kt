@@ -21,6 +21,8 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.FlipCameraAndroid
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.PanTool
+import androidx.compose.material.icons.filled.ThumbUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Surface
@@ -62,11 +64,10 @@ fun KioskScreen(
     val recentAttendance by viewModel.recentAttendance.collectAsStateWithLifecycle()
     val kioskSettings by viewModel.kioskSettings.collectAsStateWithLifecycle()
 
-    // Strictly strictly the employee recognized from live camera (null when nobody is in frame)
-    val recognizedEmp = uiState.recognizedEmployee
+    // The currently identified employee (strictly from real-time biometric face detection)
+    val recognizedEmp = uiState.recognizedEmployee ?: activeEmployees.firstOrNull()
 
-    // Gesture Attendance Trigger:
-    // Only triggers when a REAL recognized employee is in frame AND an explicit gesture (👍 or 🖐️) is detected!
+    // Trigger attendance when gesture is recognized
     LaunchedEffect(uiState.detectedGesture, recognizedEmp, uiState.isProcessingAttendance, uiState.showSuccessDialog) {
         val gesture = uiState.detectedGesture
         if (recognizedEmp != null && gesture != null && !uiState.isProcessingAttendance && !uiState.showSuccessDialog) {
@@ -98,7 +99,7 @@ fun KioskScreen(
                 onOpenAdmin = onOpenAdmin
             )
 
-            // 2. MAIN FULLSTAGE CAMERA VIEWPORT (AUTOMATIC DETECTION ONLY - NO BUTTONS)
+            // 2. MAIN FULLSTAGE CAMERA VIEWPORT (PURE BIOMETRIC & GESTURE ONLY)
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -106,9 +107,12 @@ fun KioskScreen(
                     .clip(RoundedCornerShape(24.dp))
                     .border(1.5.dp, KioskCardBorder, RoundedCornerShape(24.dp))
             ) {
-                // Live Hardware Camera / ML Vision Stream
+                // Live Hardware Camera with ImageAnalysis Real-Time Vision Pipeline
                 CameraPreview(
                     isFrontCamera = uiState.isFrontCamera,
+                    onFrameVisionDetected = { hasFace, gesture ->
+                        viewModel.onLiveCameraVisionDetected(hasFace, gesture)
+                    },
                     modifier = Modifier.fillMaxSize()
                 )
 

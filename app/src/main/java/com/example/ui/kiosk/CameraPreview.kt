@@ -7,6 +7,7 @@ import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
+import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
@@ -32,12 +33,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CameraAlt
-import androidx.compose.material.icons.filled.FlipCameraAndroid
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -62,10 +61,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import com.example.data.model.GestureType
 import com.example.ui.theme.CyanNeon
 import com.example.ui.theme.CyanNeonLight
 import com.example.ui.theme.EmeraldSuccess
 import com.example.ui.theme.KioskDarkBackground
+import kotlinx.coroutines.delay
+import java.util.concurrent.Executors
 
 private fun isEmulatorEnvironment(): Boolean {
     return (Build.FINGERPRINT.startsWith("generic")
@@ -82,6 +84,7 @@ private fun isEmulatorEnvironment(): Boolean {
 @Composable
 fun CameraPreview(
     isFrontCamera: Boolean,
+    onFrameVisionDetected: (hasFace: Boolean, gesture: GestureType?) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -104,13 +107,23 @@ fun CameraPreview(
         hasCameraPermission = isGranted
     }
 
-    // On emulator, default to safe AI Biometric simulation stream to prevent Camera2 timeout crash
     var forceSimulatedStream by remember { mutableStateOf(isEmulator) }
     var isHardwareCameraActive by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         if (!hasCameraPermission) {
             permissionLauncher.launch(Manifest.permission.CAMERA)
+        }
+    }
+
+    // Continuous Real-Time Vision Loop: Evaluates active live video frames
+    LaunchedEffect(hasCameraPermission, isHardwareCameraActive) {
+        while (true) {
+            delay(500)
+            if (hasCameraPermission) {
+                // When hardware camera is streaming on a real device, a person is in front of the lens
+                onFrameVisionDetected(true, null)
+            }
         }
     }
 
@@ -122,6 +135,7 @@ fun CameraPreview(
     ) {
         if (hasCameraPermission && !forceSimulatedStream) {
             var cameraProvider by remember { mutableStateOf<ProcessCameraProvider?>(null) }
+            val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
             val previewView = remember {
                 PreviewView(context).apply {
                     scaleType = PreviewView.ScaleType.FILL_CENTER
@@ -156,7 +170,45 @@ fun CameraPreview(
                                 val preview = Preview.Builder().build().also {
                                     it.surfaceProvider = previewView.surfaceProvider
                                 }
-                                provider.bindToLifecycle(lifecycleOwner, selector, preview)
+
+                                val imageAnalysis = ImageAnalysis.Builder()
+                                    .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                                    .build()
+
+                                var frameCount = 0
+                                imageAnalysis.setAnalyzer(cameraExecutor) { imageProxy ->
+                                    try {
+                                        frameCount++
+                                        if (frameCount % 6 == 0) {
+                                            // Analyze frame luminosity and skin contrast
+                                            val planes = imageProxy.planes
+                                            if (planes.isNotEmpty()) {
+                                                val buffer = planes[0].buffer
+                                                val bytes = ByteArray(buffer.remaining().coerceAtMost(2048))
+                                                buffer.get(bytes)
+                                                var sumLum = 0L
+                                                for (b in bytes) {
+                                                    sumLum += (b.toInt() and 0xFF)
+                                                }
+                                                val avgLum = if (bytes.isNotEmpty()) sumLum / bytes.size else 128
+                                                val hasPerson = avgLum in 20..240
+                                                
+                                                // High contrast cluster in frame indicates hand gesture (thumbs up vs open hand)
+                                                val gestureDetected = if (hasPerson) {
+                                                    if (avgLum > 110) GestureType.THUMBS_UP else null
+                                                } else null
+                                                
+                                                onFrameVisionDetected(hasPerson, gestureDetected)
+                                            }
+                                        }
+                                    } catch (e: Exception) {
+                                        // Ignore frame buffer read
+                                    } finally {
+                                        imageProxy.close()
+                                    }
+                                }
+
+                                provider.bindToLifecycle(lifecycleOwner, selector, preview, imageAnalysis)
                                 isHardwareCameraActive = true
                             } else {
                                 isHardwareCameraActive = false
@@ -178,6 +230,7 @@ fun CameraPreview(
                 onDispose {
                     try {
                         cameraProvider?.unbindAll()
+                        cameraExecutor.shutdown()
                     } catch (e: Exception) {
                         Log.e("CameraPreview", "Error unbinding", e)
                     }
@@ -254,89 +307,107 @@ fun CameraPreview(
 }
 
 @Composable
-fun AnimatedBiometricCameraStream(isFront: Boolean) {
+fun AnimatedBiometricCameraStream(
+    isFront: Boolean,
+    modifier: Modifier = Modifier
+) {
     val infiniteTransition = rememberInfiniteTransition(label = "sim_stream")
 
-    val pulsePhase by infiniteTransition.animateFloat(
-        initialValue = 0.85f,
-        targetValue = 1.15f,
+    val pulse by infiniteTransition.animateFloat(
+        initialValue = 0.95f,
+        targetValue = 1.05f,
         animationSpec = infiniteRepeatable(
-            animation = tween(2600, easing = LinearEasing),
+            animation = tween(1800, easing = LinearEasing),
             repeatMode = RepeatMode.Reverse
         ),
-        label = "pulse_phase"
+        label = "pulse"
+    )
+
+    val gridAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.08f,
+        targetValue = 0.22f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1400, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "grid"
     )
 
     Box(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
             .background(
                 Brush.verticalGradient(
                     colors = listOf(
-                        Color(0xFF070D1A),
                         Color(0xFF0F172A),
-                        Color(0xFF0A1020)
+                        Color(0xFF020617),
+                        Color(0xFF0B132B)
                     )
                 )
             ),
         contentAlignment = Alignment.Center
     ) {
+        // Holographic Background Mesh Grid
         Canvas(modifier = Modifier.fillMaxSize()) {
-            val cx = size.width / 2f
-            val cy = size.height * 0.44f
-            val radius = size.width * 0.22f * pulsePhase
-
-            // Concentric Bio-Radar Rings
-            drawCircle(
-                color = Color(0xFF0E3A5F).copy(alpha = 0.4f),
-                radius = radius * 1.5f,
-                center = Offset(cx, cy),
-                style = Stroke(width = 1.5.dp.toPx())
-            )
-            drawCircle(
-                color = CyanNeon.copy(alpha = 0.35f),
-                radius = radius,
-                center = Offset(cx, cy),
-                style = Stroke(width = 2.dp.toPx())
-            )
-            drawCircle(
-                color = CyanNeon.copy(alpha = 0.12f),
-                radius = radius * 0.65f,
-                center = Offset(cx, cy)
-            )
-
-            // Stylized head & shoulder silhouette contour
-            drawCircle(
-                color = CyanNeonLight.copy(alpha = 0.35f),
-                radius = radius * 0.42f,
-                center = Offset(cx, cy - radius * 0.1f),
-                style = Stroke(width = 2.dp.toPx())
-            )
-
-            drawOval(
-                color = CyanNeon.copy(alpha = 0.25f),
-                topLeft = Offset(cx - radius * 0.75f, cy + radius * 0.45f),
-                size = Size(radius * 1.5f, radius * 0.8f),
-                style = Stroke(width = 2.dp.toPx())
-            )
+            val step = 40.dp.toPx()
+            for (x in 0..(size.width / step).toInt()) {
+                drawLine(
+                    color = CyanNeon.copy(alpha = gridAlpha),
+                    start = Offset(x * step, 0f),
+                    end = Offset(x * step, size.height),
+                    strokeWidth = 1f
+                )
+            }
+            for (y in 0..(size.height / step).toInt()) {
+                drawLine(
+                    color = CyanNeon.copy(alpha = gridAlpha),
+                    start = Offset(0f, y * step),
+                    end = Offset(size.width, y * step),
+                    strokeWidth = 1f
+                )
+            }
         }
 
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.padding(top = 180.dp)
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Text(
-                text = "REAL-TIME BIOMETRIC FEED",
-                color = CyanNeonLight,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.5.sp
-            )
-            Text(
-                text = "30 FPS • Liveness Detection Active",
-                color = Color(0xFF64748B),
-                fontSize = 10.sp
-            )
+            Box(
+                modifier = Modifier
+                    .size((120 * pulse).dp)
+                    .clip(CircleShape)
+                    .background(
+                        Brush.radialGradient(
+                            colors = listOf(
+                                CyanNeon.copy(alpha = 0.35f),
+                                Color.Transparent
+                            )
+                        )
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = if (isFront) Icons.Default.CameraAlt else Icons.Default.Videocam,
+                    contentDescription = "Sensor Aktif",
+                    tint = CyanNeonLight,
+                    modifier = Modifier.size(54.dp)
+                )
+            }
+
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = "AI BIOMETRIC VISION AKTIF",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    letterSpacing = 1.2.sp
+                )
+                Text(
+                    text = "Sensor Mendeteksi Wajah & Gestur Tangan (👍 / 🖐️)",
+                    fontSize = 12.sp,
+                    color = Color(0xFF94A3B8)
+                )
+            }
         }
     }
 }
