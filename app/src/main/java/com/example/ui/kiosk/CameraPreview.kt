@@ -2,6 +2,7 @@ package com.example.ui.kiosk
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.os.Build
 import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -17,6 +18,7 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,12 +31,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Face
+import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.FlipCameraAndroid
 import androidx.compose.material.icons.filled.Videocam
-import androidx.compose.material.icons.filled.VideocamOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -64,6 +67,18 @@ import com.example.ui.theme.CyanNeonLight
 import com.example.ui.theme.EmeraldSuccess
 import com.example.ui.theme.KioskDarkBackground
 
+private fun isEmulatorEnvironment(): Boolean {
+    return (Build.FINGERPRINT.startsWith("generic")
+            || Build.FINGERPRINT.startsWith("unknown")
+            || Build.MODEL.contains("google_sdk")
+            || Build.MODEL.contains("Emulator")
+            || Build.MODEL.contains("Android SDK built for x86")
+            || Build.HARDWARE.contains("goldfish")
+            || Build.HARDWARE.contains("ranchu")
+            || Build.PRODUCT.contains("sdk")
+            || Build.PRODUCT.contains("google_sdk"))
+}
+
 @Composable
 fun CameraPreview(
     isFrontCamera: Boolean,
@@ -71,6 +86,8 @@ fun CameraPreview(
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+
+    val isEmulator = remember { isEmulatorEnvironment() }
 
     var hasCameraPermission by remember {
         mutableStateOf(
@@ -87,8 +104,9 @@ fun CameraPreview(
         hasCameraPermission = isGranted
     }
 
+    // On emulator, default to safe AI Biometric simulation stream to prevent Camera2 timeout crash
+    var forceSimulatedStream by remember { mutableStateOf(isEmulator) }
     var isHardwareCameraActive by remember { mutableStateOf(false) }
-    var cameraErrorMessage by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
         if (!hasCameraPermission) {
@@ -102,7 +120,7 @@ fun CameraPreview(
             .clip(RoundedCornerShape(24.dp))
             .background(KioskDarkBackground)
     ) {
-        if (hasCameraPermission) {
+        if (hasCameraPermission && !forceSimulatedStream) {
             var cameraProvider by remember { mutableStateOf<ProcessCameraProvider?>(null) }
             val previewView = remember {
                 PreviewView(context).apply {
@@ -112,50 +130,48 @@ fun CameraPreview(
             }
 
             LaunchedEffect(isFrontCamera, hasCameraPermission) {
-                val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
-                cameraProviderFuture.addListener({
-                    try {
-                        val provider = cameraProviderFuture.get()
-                        cameraProvider = provider
-                        provider.unbindAll()
+                try {
+                    val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
+                    cameraProviderFuture.addListener({
+                        try {
+                            val provider = cameraProviderFuture.get()
+                            cameraProvider = provider
+                            provider.unbindAll()
 
-                        // Check available camera selectors safely
-                        val desiredSelector = if (isFrontCamera) {
-                            CameraSelector.DEFAULT_FRONT_CAMERA
-                        } else {
-                            CameraSelector.DEFAULT_BACK_CAMERA
-                        }
-
-                        val fallbackSelector = if (isFrontCamera) {
-                            CameraSelector.DEFAULT_BACK_CAMERA
-                        } else {
-                            CameraSelector.DEFAULT_FRONT_CAMERA
-                        }
-
-                        val finalSelector = when {
-                            provider.hasCamera(desiredSelector) -> desiredSelector
-                            provider.hasCamera(fallbackSelector) -> fallbackSelector
-                            else -> null
-                        }
-
-                        if (finalSelector != null) {
-                            val preview = Preview.Builder().build().also {
-                                it.surfaceProvider = previewView.surfaceProvider
+                            val selector = if (isFrontCamera) {
+                                if (provider.hasCamera(CameraSelector.DEFAULT_FRONT_CAMERA)) {
+                                    CameraSelector.DEFAULT_FRONT_CAMERA
+                                } else {
+                                    CameraSelector.DEFAULT_BACK_CAMERA
+                                }
+                            } else {
+                                if (provider.hasCamera(CameraSelector.DEFAULT_BACK_CAMERA)) {
+                                    CameraSelector.DEFAULT_BACK_CAMERA
+                                } else {
+                                    CameraSelector.DEFAULT_FRONT_CAMERA
+                                }
                             }
 
-                            provider.bindToLifecycle(lifecycleOwner, finalSelector, preview)
-                            isHardwareCameraActive = true
-                            cameraErrorMessage = null
-                        } else {
+                            if (provider.hasCamera(selector)) {
+                                val preview = Preview.Builder().build().also {
+                                    it.surfaceProvider = previewView.surfaceProvider
+                                }
+                                provider.bindToLifecycle(lifecycleOwner, selector, preview)
+                                isHardwareCameraActive = true
+                            } else {
+                                isHardwareCameraActive = false
+                                forceSimulatedStream = true
+                            }
+                        } catch (e: Exception) {
+                            Log.w("CameraPreview", "Camera initialization issue: ${e.message}")
                             isHardwareCameraActive = false
-                            cameraErrorMessage = "Kamera virtual terdeteksi"
+                            forceSimulatedStream = true
                         }
-                    } catch (e: Exception) {
-                        Log.w("CameraPreview", "Camera binding fallback: ${e.message}")
-                        isHardwareCameraActive = false
-                        cameraErrorMessage = e.localizedMessage
-                    }
-                }, ContextCompat.getMainExecutor(context))
+                    }, ContextCompat.getMainExecutor(context))
+                } catch (e: Exception) {
+                    isHardwareCameraActive = false
+                    forceSimulatedStream = true
+                }
             }
 
             DisposableEffect(Unit) {
@@ -163,7 +179,7 @@ fun CameraPreview(
                     try {
                         cameraProvider?.unbindAll()
                     } catch (e: Exception) {
-                        Log.e("CameraPreview", "Error unbinding camera", e)
+                        Log.e("CameraPreview", "Error unbinding", e)
                     }
                 }
             }
@@ -174,96 +190,64 @@ fun CameraPreview(
                     modifier = Modifier.fillMaxSize()
                 )
             } else {
-                // High-Fidelity Futuristic Biometric Camera Simulation Stream
                 AnimatedBiometricCameraStream(isFront = isFrontCamera)
             }
-
-            // Stylized cyber vignette gradient over camera viewport
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.radialGradient(
-                            colors = listOf(
-                                Color.Transparent,
-                                Color(0x2206B6D4),
-                                Color(0xAA0A0F1D)
-                            ),
-                            radius = 900f
-                        )
-                    )
-            )
-
-            // Live Camera Source Indicator
-            Surface(
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(14.dp),
-                shape = RoundedCornerShape(12.dp),
-                color = Color(0xBB0B132B),
-                border = androidx.compose.foundation.BorderStroke(1.dp, CyanNeon.copy(alpha = 0.5f))
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(8.dp)
-                            .clip(CircleShape)
-                            .background(if (isHardwareCameraActive) EmeraldSuccess else CyanNeon)
-                    )
-                    Text(
-                        text = if (isHardwareCameraActive) {
-                            if (isFrontCamera) "LIVE HD • Kamera Depan" else "LIVE HD • Kamera Belakang"
-                        } else {
-                            "AI VISION STREAM • Live Sensor"
-                        },
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color.White
-                    )
-                }
-            }
         } else {
-            // Permission request placeholder UI
-            Column(
+            // High-Fidelity Futuristic Biometric AI Vision Stream
+            AnimatedBiometricCameraStream(isFront = isFrontCamera)
+        }
+
+        // Cyber vignette overlay
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.radialGradient(
+                        colors = listOf(
+                            Color.Transparent,
+                            Color(0x2206B6D4),
+                            Color(0xAA0A0F1D)
+                        ),
+                        radius = 900f
+                    )
+                )
+        )
+
+        // Camera Source Badge & Stream Toggle
+        Surface(
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(14.dp),
+            shape = RoundedCornerShape(12.dp),
+            color = Color(0xCC0B132B),
+            border = androidx.compose.foundation.BorderStroke(1.dp, CyanNeon.copy(alpha = 0.5f))
+        ) {
+            Row(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
+                    .clickable {
+                        // Toggle between hardware camera and AI vision simulator
+                        forceSimulatedStream = !forceSimulatedStream
+                    }
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Default.Videocam,
-                    contentDescription = null,
-                    tint = CyanNeon,
-                    modifier = Modifier.size(48.dp)
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .clip(CircleShape)
+                        .background(if (isHardwareCameraActive && !forceSimulatedStream) EmeraldSuccess else CyanNeon)
                 )
-                Spacer(modifier = Modifier.height(12.dp))
                 Text(
-                    text = "Akses Kamera Diperlukan untuk Deteksi Wajah & Gestur",
-                    color = Color.White,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.SemiBold
+                    text = if (isHardwareCameraActive && !forceSimulatedStream) {
+                        if (isFrontCamera) "LIVE HD • Kamera Tablet Depan" else "LIVE HD • Kamera Tablet Belakang"
+                    } else {
+                        "AI BIOMETRIC FEED • Live Sensor"
+                    },
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White
                 )
-                Spacer(modifier = Modifier.height(6.dp))
-                Text(
-                    text = "Izinkan akses kamera tablet untuk mengaktifkan pemindaian biometrik otomatis.",
-                    color = Color(0xFF94A3B8),
-                    fontSize = 12.sp,
-                    modifier = Modifier.padding(horizontal = 24.dp),
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                )
-                Spacer(modifier = Modifier.height(18.dp))
-                Button(
-                    onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) },
-                    colors = ButtonDefaults.buttonColors(containerColor = CyanNeon),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Text("Izinkan Akses Kamera", color = Color.Black, fontWeight = FontWeight.Bold)
-                }
             }
         }
     }
@@ -274,10 +258,10 @@ fun AnimatedBiometricCameraStream(isFront: Boolean) {
     val infiniteTransition = rememberInfiniteTransition(label = "sim_stream")
 
     val pulsePhase by infiniteTransition.animateFloat(
-        initialValue = 0.8f,
+        initialValue = 0.85f,
         targetValue = 1.15f,
         animationSpec = infiniteRepeatable(
-            animation = tween(2800, easing = LinearEasing),
+            animation = tween(2600, easing = LinearEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "pulse_phase"
@@ -289,9 +273,9 @@ fun AnimatedBiometricCameraStream(isFront: Boolean) {
             .background(
                 Brush.verticalGradient(
                     colors = listOf(
-                        Color(0xFF070C18),
+                        Color(0xFF070D1A),
                         Color(0xFF0F172A),
-                        Color(0xFF090E1C)
+                        Color(0xFF0A1020)
                     )
                 )
             ),
@@ -316,14 +300,14 @@ fun AnimatedBiometricCameraStream(isFront: Boolean) {
                 style = Stroke(width = 2.dp.toPx())
             )
             drawCircle(
-                color = CyanNeon.copy(alpha = 0.15f),
+                color = CyanNeon.copy(alpha = 0.12f),
                 radius = radius * 0.65f,
                 center = Offset(cx, cy)
             )
 
             // Stylized head & shoulder silhouette contour
             drawCircle(
-                color = CyanNeonLight.copy(alpha = 0.3f),
+                color = CyanNeonLight.copy(alpha = 0.35f),
                 radius = radius * 0.42f,
                 center = Offset(cx, cy - radius * 0.1f),
                 style = Stroke(width = 2.dp.toPx())
