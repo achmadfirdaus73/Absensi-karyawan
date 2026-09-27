@@ -153,6 +153,36 @@ class AttendanceViewModel(
     }
 
     /**
+     * Fully automatic face attendance without needing buttons.
+     * Automatically determines whether it's Masuk (Check-In) or Pulang (Check-Out)
+     * based on today's attendance status or detected gesture.
+     */
+    fun processAutoFaceAttendance(
+        employee: Employee,
+        explicitGesture: GestureType? = null
+    ) {
+        if (verificationCoolDown || _uiState.value.isProcessingAttendance) return
+        
+        val gesture = explicitGesture ?: run {
+            val hasCheckedInToday = recentAttendance.value.any {
+                it.employeeId == employee.id && it.type == AttendanceType.CHECK_IN
+            }
+            val hasCheckedOutToday = recentAttendance.value.any {
+                it.employeeId == employee.id && it.type == AttendanceType.CHECK_OUT
+            }
+            if (!hasCheckedInToday) {
+                GestureType.THUMBS_UP
+            } else if (!hasCheckedOutToday) {
+                GestureType.OPEN_HAND
+            } else {
+                GestureType.THUMBS_UP
+            }
+        }
+        
+        processBiometricAttendance(employee, gesture)
+    }
+
+    /**
      * Triggered by Camera HUD simulation or direct gesture trigger (👍 Masuk / 🖐️ Pulang)
      */
     fun processBiometricAttendance(

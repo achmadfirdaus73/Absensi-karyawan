@@ -169,7 +169,7 @@ fun AdminDashboardScreen(
                     )
 
                     Text(
-                        text = "Masukkan PIN Kiosk untuk mengelola karyawan & pengaturan (Default: 1234)",
+                        text = "Masukkan PIN Kiosk untuk mengelola karyawan & pengaturan",
                         fontSize = 12.sp,
                         color = Color(0xFF94A3B8),
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -913,7 +913,7 @@ fun KioskSettingsTab(
                 OutlinedTextField(
                     value = kioskPin,
                     onValueChange = { kioskPin = it },
-                    label = { Text("PIN Kiosk Admin (Default: 1234)") },
+                    label = { Text("PIN Kiosk Admin") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
                     modifier = Modifier.fillMaxWidth(),
                     colors = OutlinedTextFieldDefaults.colors(

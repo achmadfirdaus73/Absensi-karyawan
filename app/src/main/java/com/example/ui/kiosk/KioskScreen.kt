@@ -1,16 +1,10 @@
 package com.example.ui.kiosk
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -19,9 +13,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -30,11 +21,6 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.FlipCameraAndroid
 import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.PanTool
-import androidx.compose.material.icons.filled.ThumbUp
-import androidx.compose.material.icons.filled.TouchApp
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Surface
@@ -42,41 +28,29 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
 import com.example.biometrics.BiometricScanState
 import com.example.data.model.AttendanceRecord
 import com.example.data.model.AttendanceType
-import com.example.data.model.Employee
 import com.example.data.model.GestureType
 import com.example.network.CloudSyncStatus
 import com.example.ui.theme.AmberCheckout
-import com.example.ui.theme.AmberCheckoutLight
 import com.example.ui.theme.CyanNeon
 import com.example.ui.theme.CyanNeonLight
 import com.example.ui.theme.EmeraldSuccess
-import com.example.ui.theme.EmeraldSuccessLight
-import com.example.ui.theme.KioskCardBackground
 import com.example.ui.theme.KioskCardBorder
 import com.example.ui.theme.KioskDarkBackground
 import com.example.ui.theme.KioskDarkSurface
-import com.example.ui.theme.RoseError
 import com.example.ui.viewmodel.AttendanceViewModel
+import kotlinx.coroutines.delay
 
 @Composable
 fun KioskScreen(
@@ -89,8 +63,19 @@ fun KioskScreen(
     val recentAttendance by viewModel.recentAttendance.collectAsStateWithLifecycle()
     val kioskSettings by viewModel.kioskSettings.collectAsStateWithLifecycle()
 
-    // The currently targeted employee (auto-matched by face or active queue)
+    // The currently identified employee (auto-matched by face or top of registered list)
     val recognizedEmp = uiState.recognizedEmployee ?: activeEmployees.firstOrNull()
+
+    // Automatic Attendance Scan Trigger Loop:
+    // When an employee is in frame and recognized, auto-process attendance seamlessly after 1.5 seconds of steady detection
+    LaunchedEffect(recognizedEmp, uiState.scanState, uiState.isProcessingAttendance, uiState.showSuccessDialog) {
+        if (recognizedEmp != null && !uiState.isProcessingAttendance && !uiState.showSuccessDialog) {
+            delay(1500)
+            if (!uiState.isProcessingAttendance && !uiState.showSuccessDialog) {
+                viewModel.processAutoFaceAttendance(recognizedEmp, uiState.detectedGesture?.type)
+            }
+        }
+    }
 
     Box(
         modifier = modifier
@@ -114,28 +99,34 @@ fun KioskScreen(
                 onOpenAdmin = onOpenAdmin
             )
 
-            // 2. MAIN CENTERPIECE: ULTRA-CLEAN LIVE CAMERA BIOMETRIC SCANNER
+            // 2. MAIN FULLSTAGE CAMERA VIEWPORT (AUTOMATIC DETECTION ONLY - NO BUTTONS)
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(24.dp))
                     .border(1.5.dp, KioskCardBorder, RoundedCornerShape(24.dp))
+                    .clickable {
+                        // Quick tap on camera area to trigger instant auto-attendance if desired
+                        recognizedEmp?.let {
+                            viewModel.processAutoFaceAttendance(it, uiState.detectedGesture?.type)
+                        }
+                    }
             ) {
-                // Live Hardware/AI Stream
+                // Live Hardware Camera / ML Vision Stream
                 CameraPreview(
                     isFrontCamera = uiState.isFrontCamera,
                     modifier = Modifier.fillMaxSize()
                 )
 
-                // Clean Holographic Reticle HUD
+                // Holographic Biometric Reticle HUD
                 BiometricHudOverlay(
                     scanState = uiState.scanState,
                     recognizedEmployee = recognizedEmp,
                     detectedGesture = uiState.detectedGesture
                 )
 
-                // Lens Switcher Button (Top-Right)
+                // Subtle Camera Switcher Button (Top-Right)
                 IconButton(
                     onClick = { viewModel.toggleCamera() },
                     modifier = Modifier
@@ -150,93 +141,13 @@ fun KioskScreen(
                         modifier = Modifier.size(20.dp)
                     )
                 }
-
-                // Minimal Action Triggers Dock (Zero manual search, direct instant sync)
-                Row(
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .fillMaxWidth()
-                        .padding(start = 16.dp, end = 16.dp, bottom = 14.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    // Masuk (👍)
-                    Button(
-                        onClick = {
-                            recognizedEmp?.let {
-                                viewModel.processBiometricAttendance(it, GestureType.THUMBS_UP)
-                            }
-                        },
-                        enabled = recognizedEmp != null && !uiState.isProcessingAttendance,
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(50.dp),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = EmeraldSuccess,
-                            disabledContainerColor = Color(0xFF1E293B)
-                        ),
-                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 6.dp)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Icon(Icons.Default.ThumbUp, contentDescription = null, tint = Color.Black, modifier = Modifier.size(18.dp))
-                            Text("ABSEN MASUK (👍)", color = Color.Black, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                        }
-                    }
-
-                    // Pulang (🖐️)
-                    Button(
-                        onClick = {
-                            recognizedEmp?.let {
-                                viewModel.processBiometricAttendance(it, GestureType.OPEN_HAND)
-                            }
-                        },
-                        enabled = recognizedEmp != null && !uiState.isProcessingAttendance,
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(50.dp),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = AmberCheckout,
-                            disabledContainerColor = Color(0xFF1E293B)
-                        ),
-                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 6.dp)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Icon(Icons.Default.PanTool, contentDescription = null, tint = Color.Black, modifier = Modifier.size(18.dp))
-                            Text("ABSEN PULANG (🖐️)", color = Color.Black, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                        }
-                    }
-
-                    // Manual PIN Fallback
-                    Surface(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(16.dp))
-                            .clickable { viewModel.openManualDialog() },
-                        color = Color(0xCC0F172A),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF334155))
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(50.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(Icons.Default.TouchApp, contentDescription = "Manual PIN", tint = CyanNeon, modifier = Modifier.size(22.dp))
-                        }
-                    }
-                }
             }
 
-            // 3. SLEEK REAL-TIME ATTENDANCE TICKER (Clean Single-Strip Log)
+            // 3. MINIMALIST REAL-TIME ATTENDANCE TICKER (BOTTOM LOG)
             MinimalAttendanceTicker(recentAttendance = recentAttendance)
         }
 
-        // 4. INSTANT VERIFIED ATTENDANCE POPUP MODAL
+        // 4. INSTANT VERIFIED ATTENDANCE POPUP OVERLAY
         if (uiState.showSuccessDialog && uiState.lastVerifiedRecord != null) {
             AttendanceSuccessDialog(
                 record = uiState.lastVerifiedRecord!!,
@@ -244,7 +155,7 @@ fun KioskScreen(
             )
         }
 
-        // Manual Attendance Dialog (PIN / Backup)
+        // Manual Attendance Dialog (PIN Fallback)
         if (uiState.showManualDialog) {
             ManualAttendanceDialog(
                 employees = activeEmployees,
@@ -446,7 +357,7 @@ fun MinimalAttendanceTicker(recentAttendance: List<AttendanceRecord>) {
                             .background(EmeraldSuccess)
                     )
                     Text(
-                        text = "Kiosk Siap • Hadapkan Wajah ke Kamera untuk Presensi",
+                        text = "Kiosk Siap • Hadapkan Wajah ke Kamera",
                         fontSize = 12.sp,
                         color = Color(0xFF94A3B8)
                     )
