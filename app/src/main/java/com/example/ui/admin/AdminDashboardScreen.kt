@@ -960,6 +960,25 @@ fun KioskSettingsTab(
                     )
                 )
 
+                // Live status API logger card
+                Card(
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B)),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("📡 Status Pengiriman Terakhir (Real-Time):", fontWeight = FontWeight.Bold, color = CyanNeon, fontSize = 13.sp)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("WhatsApp: ", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            Text(com.example.network.DispatchStatusTracker.lastWaResult, color = if (com.example.network.DispatchStatusTracker.lastWaResult.contains("Sukses")) EmeraldSuccess else Color.LightGray, fontSize = 12.sp)
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("Email: ", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            Text(com.example.network.DispatchStatusTracker.lastEmailResult, color = if (com.example.network.DispatchStatusTracker.lastEmailResult.contains("Sukses")) EmeraldSuccess else Color.LightGray, fontSize = 12.sp)
+                        }
+                    }
+                }
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,

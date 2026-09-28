@@ -4,10 +4,15 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
+import android.widget.Toast
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import com.example.data.model.AttendanceRecord
 import com.example.data.model.AttendanceType
-import com.example.data.model.GestureType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.FormBody
@@ -16,6 +21,11 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.util.concurrent.TimeUnit
+
+object DispatchStatusTracker {
+    var lastWaResult: String by mutableStateOf("Belum ada pengiriman")
+    var lastEmailResult: String by mutableStateOf("Belum ada pengiriman")
+}
 
 class AdminNotificationDispatcher(private val context: Context) {
     private val channelId = "admin_attendance_alerts_silent"
@@ -48,6 +58,12 @@ class AdminNotificationDispatcher(private val context: Context) {
         }
     }
 
+    private fun showToastOnMainThread(message: String) {
+        Handler(Looper.getMainLooper()).post {
+            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+        }
+    }
+
     suspend fun dispatchToAdmin(
         record: AttendanceRecord,
         adminEmail: String,
@@ -73,23 +89,42 @@ class AdminNotificationDispatcher(private val context: Context) {
         // 1. Direct WhatsApp Dispatch (using your official master Fonnte Token)
         if (adminWhatsappNumber.isNotBlank()) {
             try {
+                // Ensure correct Indonesian country code prefix if starting with 0 or 08
+                var targetNumber = adminWhatsappNumber.trim()
+                if (targetNumber.startsWith("0")) {
+                    targetNumber = "62" + targetNumber.substring(1)
+                }
+
                 val formBody = FormBody.Builder()
-                    .add("target", adminWhatsappNumber)
+                    .add("target", targetNumber)
                     .add("message", formattedMessage)
                     .build()
 
                 val request = Request.Builder()
                     .url("https://api.fonnte.com/send")
-                    .addHeader("Authorization", masterFonnteToken)
+                    .addHeader("Authorization", masterFonnteToken.trim())
                     .post(formBody)
                     .build()
 
                 client.newCall(request).execute().use { response ->
-                    Log.d("NotificationDispatcher", "WA Fonnte Status: ${response.code} Success: ${response.isSuccessful}")
+                    val bodyString = response.body?.string() ?: ""
+                    Log.d("NotificationDispatcher", "WA Fonnte Status: ${response.code} Response: $bodyString")
+                    
+                    if (response.isSuccessful) {
+                        DispatchStatusTracker.lastWaResult = "Sukses (200)"
+                        showToastOnMainThread("WhatsApp berhasil dikirim ke $targetNumber!")
+                    } else {
+                        DispatchStatusTracker.lastWaResult = "Gagal (${response.code}): $bodyString"
+                        showToastOnMainThread("Gagal kirim WA (${response.code})")
+                    }
                 }
             } catch (e: Exception) {
                 Log.e("NotificationDispatcher", "Direct WA dispatch failed", e)
+                DispatchStatusTracker.lastWaResult = "Error: ${e.localizedMessage}"
+                showToastOnMainThread("Koneksi WA Error: ${e.localizedMessage}")
             }
+        } else {
+            DispatchStatusTracker.lastWaResult = "Gagal: Nomor WA Kosong"
         }
 
         // 2. Direct Email Dispatch (using your official master Resend API Key)
@@ -115,7 +150,7 @@ class AdminNotificationDispatcher(private val context: Context) {
                             </tr>
                             <tr>
                                 <td style="padding: 12px; font-weight: bold;">Tipe Kehadiran</td>
-                                <td style="padding: 12px; font-weight: bold; color: #2563eb;">${typeText}</td>
+                                <td style="padding: 12px; font-weight: bold; color: #2563eb;">$typeText</td>
                             </tr>
                             <tr style="background-color: #f1f5f9;">
                                 <td style="padding: 12px; font-weight: bold;">Waktu Presensi</td>
@@ -123,7 +158,7 @@ class AdminNotificationDispatcher(private val context: Context) {
                             </tr>
                             <tr>
                                 <td style="padding: 12px; font-weight: bold;">Ketepatan Waktu</td>
-                                <td style="padding: 12px; font-weight: bold;">${statusEmoji}</td>
+                                <td style="padding: 12px; font-weight: bold;">$statusEmoji</td>
                             </tr>
                             <tr style="background-color: #f1f5f9;">
                                 <td style="padding: 12px; font-weight: bold;">Lokasi Presensi</td>
@@ -140,7 +175,7 @@ class AdminNotificationDispatcher(private val context: Context) {
                 val jsonPayload = """
                     {
                         "from": "onboarding@resend.dev",
-                        "to": "$adminEmail",
+                        "to": "${adminEmail.trim()}",
                         "subject": "🚨 Laporan Presensi Karyawan: ${record.employeeName}",
                         "html": ${escapeJsonString(htmlMessage)}
                     }
@@ -149,16 +184,29 @@ class AdminNotificationDispatcher(private val context: Context) {
                 val body = jsonPayload.toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull())
                 val request = Request.Builder()
                     .url("https://api.resend.com/emails")
-                    .addHeader("Authorization", "Bearer $masterResendApiKey")
+                    .addHeader("Authorization", "Bearer ${masterResendApiKey.trim()}")
                     .post(body)
                     .build()
 
                 client.newCall(request).execute().use { response ->
-                    Log.d("NotificationDispatcher", "Email Resend Status: ${response.code} Success: ${response.isSuccessful}")
+                    val bodyString = response.body?.string() ?: ""
+                    Log.d("NotificationDispatcher", "Email Resend Status: ${response.code} Response: $bodyString")
+                    
+                    if (response.isSuccessful) {
+                        DispatchStatusTracker.lastEmailResult = "Sukses (200)"
+                        showToastOnMainThread("Email Laporan berhasil dikirim ke ${adminEmail.trim()}!")
+                    } else {
+                        DispatchStatusTracker.lastEmailResult = "Gagal (${response.code}): $bodyString"
+                        showToastOnMainThread("Gagal kirim Email (${response.code})")
+                    }
                 }
             } catch (e: Exception) {
                 Log.e("NotificationDispatcher", "Direct Email dispatch failed", e)
+                DispatchStatusTracker.lastEmailResult = "Error: ${e.localizedMessage}"
+                showToastOnMainThread("Koneksi Email Error: ${e.localizedMessage}")
             }
+        } else {
+            DispatchStatusTracker.lastEmailResult = "Gagal: Email Admin Kosong"
         }
 
         true
