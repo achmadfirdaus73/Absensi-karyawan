@@ -64,6 +64,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.foundation.BorderStroke
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.data.model.Employee
@@ -330,34 +331,38 @@ fun RegisterEmployeeDialog(
                     )
                 )
 
-                // Jam Shift Kerja
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OutlinedTextField(
-                        value = shiftStart,
-                        onValueChange = { shiftStart = it },
-                        label = { Text("Jam Masuk (08:00)") },
-                        leadingIcon = { Icon(Icons.Default.Schedule, contentDescription = null, tint = EmeraldSuccess) },
-                        modifier = Modifier.weight(1f),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = CyanNeon,
-                            unfocusedBorderColor = Color(0xFF334155),
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White
+                // Info Card: Auto-Detect Shift
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A)),
+                    border = BorderStroke(1.dp, CyanNeon.copy(alpha = 0.4f)),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Schedule,
+                            contentDescription = "Auto Shift",
+                            tint = CyanNeon,
+                            modifier = Modifier.size(24.dp)
                         )
-                    )
-                    OutlinedTextField(
-                        value = shiftEnd,
-                        onValueChange = { shiftEnd = it },
-                        label = { Text("Jam Pulang (17:00)") },
-                        leadingIcon = { Icon(Icons.Default.Schedule, contentDescription = null, tint = Color(0xFFF59E0B)) },
-                        modifier = Modifier.weight(1f),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = CyanNeon,
-                            unfocusedBorderColor = Color(0xFF334155),
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White
-                        )
-                    )
+                        Column {
+                            Text(
+                                text = "Auto-Detect Shift Aktif 🕒",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                            Text(
+                                text = "Karyawan ini otomatis dicocokkan ke Shift 1, 2, atau 3 sesuai jam absen terdekat saat di depan Kiosk.",
+                                fontSize = 11.sp,
+                                color = Color(0xFF94A3B8)
+                            )
+                        }
+                    }
                 }
 
                 // Kontak (Email & Phone)

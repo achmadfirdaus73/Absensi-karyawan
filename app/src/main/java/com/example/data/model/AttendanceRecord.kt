@@ -67,5 +67,11 @@ data class KioskSettings(
     val frontCameraSelected: Boolean = true,
     val adminWhatsappNumber: String = "",
     val adminWhatsappToken: String = "",
-    val adminWhatsappGatewayUrl: String = "https://api.fonnte.com/send"
+    val adminWhatsappGatewayUrl: String = "https://api.fonnte.com/send",
+    val shift1Start: String = "08:00",
+    val shift1End: String = "17:00",
+    val shift2Start: String = "14:00",
+    val shift2End: String = "22:00",
+    val shift3Start: String = "22:00",
+    val shift3End: String = "06:00"
 )

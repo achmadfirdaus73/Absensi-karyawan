@@ -82,7 +82,8 @@ class AttendanceRepository(
         val dateStr = dateFormat.format(Date(now))
         val timeStr = timeFormat.format(Date(now))
 
-        val punctuality = calculatePunctuality(employee, type, now)
+        val settings = kioskSettingsDao.getSettings() ?: KioskSettings()
+        val punctuality = calculatePunctuality(employee, type, now, settings)
 
         val record = AttendanceRecord(
             employeeId = employee.id,
@@ -129,41 +130,93 @@ class AttendanceRepository(
         return record.copy(id = recordId)
     }
 
-    private fun calculatePunctuality(employee: Employee, type: AttendanceType, timestamp: Long): PunctualityStatus {
+    private fun calculatePunctuality(
+        employee: Employee,
+        type: AttendanceType,
+        timestamp: Long,
+        settings: KioskSettings
+    ): PunctualityStatus {
         val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
         val currentTimeStr = timeFormat.format(Date(timestamp))
+        val currentMinutes = parseTimeToMinutes(currentTimeStr)
 
-        return if (type == AttendanceType.CHECK_IN) {
-            if (currentTimeStr > employee.shiftStart) PunctualityStatus.LATE else PunctualityStatus.ON_TIME
+        // Parse Shift 1, Shift 2, Shift 3 configurations
+        val s1StartMin = parseTimeToMinutes(settings.shift1Start)
+        val s1EndMin = parseTimeToMinutes(settings.shift1End)
+        val s2StartMin = parseTimeToMinutes(settings.shift2Start)
+        val s2EndMin = parseTimeToMinutes(settings.shift2End)
+        val s3StartMin = parseTimeToMinutes(settings.shift3Start)
+        val s3EndMin = parseTimeToMinutes(settings.shift3End)
+
+        if (type == AttendanceType.CHECK_IN) {
+            val diff1 = circularDiffMinutes(currentMinutes, s1StartMin)
+            val diff2 = circularDiffMinutes(currentMinutes, s2StartMin)
+            val diff3 = circularDiffMinutes(currentMinutes, s3StartMin)
+
+            val minDiff = minOf(diff1, diff2, diff3)
+            val chosenStartMin = when (minDiff) {
+                diff1 -> s1StartMin
+                diff2 -> s2StartMin
+                else -> s3StartMin
+            }
+
+            return if (isTimeAfter(currentMinutes, chosenStartMin)) {
+                PunctualityStatus.LATE
+            } else {
+                PunctualityStatus.ON_TIME
+            }
         } else {
-            if (currentTimeStr < employee.shiftEnd) {
+            val diff1 = circularDiffMinutes(currentMinutes, s1EndMin)
+            val diff2 = circularDiffMinutes(currentMinutes, s2EndMin)
+            val diff3 = circularDiffMinutes(currentMinutes, s3EndMin)
+
+            val minDiff = minOf(diff1, diff2, diff3)
+            val chosenEndMin = when (minDiff) {
+                diff1 -> s1EndMin
+                diff2 -> s2EndMin
+                else -> s3EndMin
+            }
+
+            return if (currentMinutes < chosenEndMin) {
                 PunctualityStatus.EARLY_DEPARTURE
             } else {
-                try {
-                    val currentParts = currentTimeStr.split(":")
-                    val endParts = employee.shiftEnd.split(":")
-                    if (currentParts.size == 2 && endParts.size == 2) {
-                        val currentMinutes = currentParts[0].toInt() * 60 + currentParts[1].toInt()
-                        val endMinutes = endParts[0].toInt() * 60 + endParts[1].toInt()
-                        
-                        var diff = currentMinutes - endMinutes
-                        // Handle overnight shift checkout on next day
-                        if (diff < -720) {
-                            diff += 1440
-                        }
-                        
-                        if (diff >= 30) {
-                            PunctualityStatus.OVERTIME
-                        } else {
-                            PunctualityStatus.NORMAL
-                        }
-                    } else {
-                        PunctualityStatus.NORMAL
-                    }
-                } catch (e: Exception) {
+                var diff = currentMinutes - chosenEndMin
+                // Handle overnight shift checkout on next day
+                if (diff < -720) {
+                    diff += 1440
+                }
+                
+                if (diff >= 30) {
+                    PunctualityStatus.OVERTIME
+                } else {
                     PunctualityStatus.NORMAL
                 }
             }
+        }
+    }
+
+    private fun parseTimeToMinutes(timeStr: String): Int {
+        return try {
+            val parts = timeStr.trim().split(":")
+            parts[0].toInt() * 60 + parts[1].toInt()
+        } catch (e: Exception) {
+            0
+        }
+    }
+
+    private fun circularDiffMinutes(t1: Int, t2: Int): Int {
+        val diff = kotlin.math.abs(t1 - t2)
+        return kotlin.math.min(diff, 1440 - diff)
+    }
+
+    private fun isTimeAfter(t1: Int, t2: Int): Boolean {
+        val diff = t1 - t2
+        return if (diff in 1..720) {
+            true
+        } else if (diff < -720) {
+            true // wrapped around midnight
+        } else {
+            false
         }
     }
 

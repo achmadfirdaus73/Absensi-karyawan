@@ -834,6 +834,13 @@ fun KioskSettingsTab(
     var kioskPin by remember { mutableStateOf(settings.kioskPin) }
     var whatsappNumber by remember { mutableStateOf(settings.adminWhatsappNumber) }
 
+    var shift1Start by remember { mutableStateOf(settings.shift1Start) }
+    var shift1End by remember { mutableStateOf(settings.shift1End) }
+    var shift2Start by remember { mutableStateOf(settings.shift2Start) }
+    var shift2End by remember { mutableStateOf(settings.shift2End) }
+    var shift3Start by remember { mutableStateOf(settings.shift3Start) }
+    var shift3End by remember { mutableStateOf(settings.shift3End) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -924,6 +931,119 @@ fun KioskSettingsTab(
                         unfocusedTextColor = Color.White
                     )
                 )
+            }
+        }
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = KioskCardBackground),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                Text("Konfigurasi Waktu Shift Kantor (Auto-Detect)", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                Text(
+                    text = "Sistem akan mendeteksi otomatis shift karyawan berdasarkan kedatangan terdekat dari jam masuk di bawah.",
+                    fontSize = 12.sp,
+                    color = Color(0xFF94A3B8)
+                )
+
+                // Shift 1
+                Text("Shift 1 (Pagi / Normal)", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = CyanNeon)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    OutlinedTextField(
+                        value = shift1Start,
+                        onValueChange = { shift1Start = it },
+                        label = { Text("Jam Masuk (HH:mm)") },
+                        modifier = Modifier.weight(1f),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = CyanNeon,
+                            unfocusedBorderColor = Color(0xFF334155),
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White
+                        )
+                    )
+                    OutlinedTextField(
+                        value = shift1End,
+                        onValueChange = { shift1End = it },
+                        label = { Text("Jam Pulang (HH:mm)") },
+                        modifier = Modifier.weight(1f),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = CyanNeon,
+                            unfocusedBorderColor = Color(0xFF334155),
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White
+                        )
+                    )
+                }
+
+                // Shift 2
+                Spacer(modifier = Modifier.height(4.dp))
+                Text("Shift 2 (Siang / Sore)", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = CyanNeon)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    OutlinedTextField(
+                        value = shift2Start,
+                        onValueChange = { shift2Start = it },
+                        label = { Text("Jam Masuk (HH:mm)") },
+                        modifier = Modifier.weight(1f),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = CyanNeon,
+                            unfocusedBorderColor = Color(0xFF334155),
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White
+                        )
+                    )
+                    OutlinedTextField(
+                        value = shift2End,
+                        onValueChange = { shift2End = it },
+                        label = { Text("Jam Pulang (HH:mm)") },
+                        modifier = Modifier.weight(1f),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = CyanNeon,
+                            unfocusedBorderColor = Color(0xFF334155),
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White
+                        )
+                    )
+                }
+
+                // Shift 3
+                Spacer(modifier = Modifier.height(4.dp))
+                Text("Shift 3 (Malam)", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = CyanNeon)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    OutlinedTextField(
+                        value = shift3Start,
+                        onValueChange = { shift3Start = it },
+                        label = { Text("Jam Masuk (HH:mm)") },
+                        modifier = Modifier.weight(1f),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = CyanNeon,
+                            unfocusedBorderColor = Color(0xFF334155),
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White
+                        )
+                    )
+                    OutlinedTextField(
+                        value = shift3End,
+                        onValueChange = { shift3End = it },
+                        label = { Text("Jam Pulang (HH:mm)") },
+                        modifier = Modifier.weight(1f),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = CyanNeon,
+                            unfocusedBorderColor = Color(0xFF334155),
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White
+                        )
+                    )
+                }
             }
         }
 
@@ -1082,7 +1202,13 @@ fun KioskSettingsTab(
                     autoSyncToCloud = autoSync,
                     googleSheetUrl = googleSheetUrl.trim(),
                     kioskPin = kioskPin.trim(),
-                    adminWhatsappNumber = whatsappNumber.trim()
+                    adminWhatsappNumber = whatsappNumber.trim(),
+                    shift1Start = shift1Start.trim(),
+                    shift1End = shift1End.trim(),
+                    shift2Start = shift2Start.trim(),
+                    shift2End = shift2End.trim(),
+                    shift3Start = shift3Start.trim(),
+                    shift3End = shift3End.trim()
                 )
                 onSaveSettings(updated)
             },
