@@ -37,7 +37,7 @@ class AdminNotificationDispatcher(private val context: Context) {
         .build()
 
     // Real hardcoded credentials provided by you for the platform master dispatch
-    private val masterFonnteToken = "u5WsJdwzLjCq7jnAmaAShmvqFL64AGgwDpxHNgWHyzw4WH"
+    private val masterFonnteToken = "RhmVSsG2fuWMvU4euJoY"
 
     init {
         createNotificationChannel()
