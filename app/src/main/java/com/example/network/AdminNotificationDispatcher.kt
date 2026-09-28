@@ -24,19 +24,20 @@ import java.util.concurrent.TimeUnit
 
 object DispatchStatusTracker {
     var lastWaResult: String by mutableStateOf("Belum ada pengiriman")
-    var lastEmailResult: String by mutableStateOf("Belum ada pengiriman")
+    var lastSheetResult: String by mutableStateOf("Belum ada pengiriman")
 }
 
 class AdminNotificationDispatcher(private val context: Context) {
     private val channelId = "admin_attendance_alerts_silent"
     private val client = OkHttpClient.Builder()
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(15, TimeUnit.SECONDS)
+        .connectTimeout(20, TimeUnit.SECONDS)
+        .readTimeout(20, TimeUnit.SECONDS)
+        .followRedirects(true)
+        .followSslRedirects(true)
         .build()
 
     // Real hardcoded credentials provided by you for the platform master dispatch
     private val masterFonnteToken = "u5WsJdwzLjCq7jnAmaAShmvqFL64AGgwDpxHNgWHyzw4WH"
-    private val masterResendApiKey = "re_F2uM6AJ2_3BpjG8qfCBzDEuDq8tgbAWip"
 
     init {
         createNotificationChannel()
@@ -66,7 +67,7 @@ class AdminNotificationDispatcher(private val context: Context) {
 
     suspend fun dispatchToAdmin(
         record: AttendanceRecord,
-        adminEmail: String,
+        googleSheetUrl: String,
         adminWhatsappNumber: String
     ): Boolean = withContext(Dispatchers.IO) {
         val typeText = if (record.type == AttendanceType.CHECK_IN) "ABSEN MASUK" else "ABSEN PULANG"
@@ -111,10 +112,16 @@ class AdminNotificationDispatcher(private val context: Context) {
                     Log.d("NotificationDispatcher", "WA Fonnte Status: ${response.code} Response: $bodyString")
                     
                     if (response.isSuccessful) {
-                        DispatchStatusTracker.lastWaResult = "Sukses (200)"
-                        showToastOnMainThread("WhatsApp berhasil dikirim ke $targetNumber!")
+                        val isTrueStatus = bodyString.contains("\"status\":true") || bodyString.contains("\"status\": true")
+                        if (isTrueStatus) {
+                            DispatchStatusTracker.lastWaResult = "Sukses (200)"
+                            showToastOnMainThread("WhatsApp berhasil dikirim ke $targetNumber!")
+                        } else {
+                            DispatchStatusTracker.lastWaResult = "Fonnte Menolak: $bodyString"
+                            showToastOnMainThread("WA ditolak Fonnte!")
+                        }
                     } else {
-                        DispatchStatusTracker.lastWaResult = "Gagal (${response.code}): $bodyString"
+                        DispatchStatusTracker.lastWaResult = "Gagal HTTP (${response.code}): $bodyString"
                         showToastOnMainThread("Gagal kirim WA (${response.code})")
                     }
                 }
@@ -127,98 +134,53 @@ class AdminNotificationDispatcher(private val context: Context) {
             DispatchStatusTracker.lastWaResult = "Gagal: Nomor WA Kosong"
         }
 
-        // 2. Direct Email Dispatch (using your official master Resend API Key)
-        if (adminEmail.isNotBlank()) {
+        // 2. Direct Google Sheets Web App Synchronization
+        if (googleSheetUrl.isNotBlank() && (googleSheetUrl.startsWith("http://") || googleSheetUrl.startsWith("https://"))) {
             try {
-                val htmlMessage = """
-                    <div style="font-family: Arial, sans-serif; padding: 25px; color: #1e293b; background-color: #f8fafc; border-radius: 12px; max-width: 600px; border: 1px solid #e2e8f0;">
-                        <h2 style="color: #0f172a; border-bottom: 2px solid #e2e8f0; padding-bottom: 12px; margin-top: 0;">📢 NOTIFIKASI PRESENSI KARYAWAN</h2>
-                        <p style="font-size: 15px; color: #475569;">Berikut adalah rincian presensi yang baru saja tercatat di Kiosk:</p>
-                        
-                        <table style="border-collapse: collapse; width: 100%; margin-top: 15px; background: #ffffff; border-radius: 8px; overflow: hidden;">
-                            <tr style="background-color: #f1f5f9;">
-                                <td style="padding: 12px; font-weight: bold; width: 30%;">Nama Karyawan</td>
-                                <td style="padding: 12px;">${record.employeeName}</td>
-                            </tr>
-                            <tr>
-                                <td style="padding: 12px; font-weight: bold;">Nomor Induk (NIK)</td>
-                                <td style="padding: 12px;">${record.employeeCode}</td>
-                            </tr>
-                            <tr style="background-color: #f1f5f9;">
-                                <td style="padding: 12px; font-weight: bold;">Divisi / Dept</td>
-                                <td style="padding: 12px;">${record.department}</td>
-                            </tr>
-                            <tr>
-                                <td style="padding: 12px; font-weight: bold;">Tipe Kehadiran</td>
-                                <td style="padding: 12px; font-weight: bold; color: #2563eb;">$typeText</td>
-                            </tr>
-                            <tr style="background-color: #f1f5f9;">
-                                <td style="padding: 12px; font-weight: bold;">Waktu Presensi</td>
-                                <td style="padding: 12px;">${record.formattedDate} ${record.formattedTime}</td>
-                            </tr>
-                            <tr>
-                                <td style="padding: 12px; font-weight: bold;">Ketepatan Waktu</td>
-                                <td style="padding: 12px; font-weight: bold;">$statusEmoji</td>
-                            </tr>
-                            <tr style="background-color: #f1f5f9;">
-                                <td style="padding: 12px; font-weight: bold;">Lokasi Presensi</td>
-                                <td style="padding: 12px; font-size: 13px; line-height: 1.4;">${record.locationAddress}</td>
-                            </tr>
-                        </table>
-                        
-                        <p style="font-size: 11px; color: #94a3b8; text-align: center; margin-top: 25px;">
-                            <i>Dikirim secara otomatis oleh SmartPresensi Kiosk AI • Layanan Kehadiran Masa Kini</i>
-                        </p>
-                    </div>
-                """.trimIndent()
+                val cleanLocation = record.locationAddress
+                    .replace("\n", " ")
+                    .replace("\\", "\\\\")
+                    .replace("\"", "\\\"")
 
                 val jsonPayload = """
                     {
-                        "from": "onboarding@resend.dev",
-                        "to": "${adminEmail.trim()}",
-                        "subject": "🚨 Laporan Presensi Karyawan: ${record.employeeName}",
-                        "html": ${escapeJsonString(htmlMessage)}
+                        "nama": "${record.employeeName}",
+                        "nik": "${record.employeeCode}",
+                        "divisi": "${record.department}",
+                        "waktu": "${record.formattedDate} ${record.formattedTime}",
+                        "status": "$typeText",
+                        "punctuality": "$statusEmoji",
+                        "lokasi": "$cleanLocation"
                     }
                 """.trimIndent()
 
                 val body = jsonPayload.toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull())
                 val request = Request.Builder()
-                    .url("https://api.resend.com/emails")
-                    .addHeader("Authorization", "Bearer ${masterResendApiKey.trim()}")
+                    .url(googleSheetUrl.trim())
                     .post(body)
                     .build()
 
                 client.newCall(request).execute().use { response ->
                     val bodyString = response.body?.string() ?: ""
-                    Log.d("NotificationDispatcher", "Email Resend Status: ${response.code} Response: $bodyString")
+                    Log.d("NotificationDispatcher", "Google Sheet Sync Status: ${response.code} Response: $bodyString")
                     
                     if (response.isSuccessful) {
-                        DispatchStatusTracker.lastEmailResult = "Sukses (200)"
-                        showToastOnMainThread("Email Laporan berhasil dikirim ke ${adminEmail.trim()}!")
+                        DispatchStatusTracker.lastSheetResult = "Sukses (200)"
+                        showToastOnMainThread("Data berhasil sinkron ke Google Sheet!")
                     } else {
-                        DispatchStatusTracker.lastEmailResult = "Gagal (${response.code}): $bodyString"
-                        showToastOnMainThread("Gagal kirim Email (${response.code})")
+                        DispatchStatusTracker.lastSheetResult = "Gagal (${response.code}): $bodyString"
+                        showToastOnMainThread("Gagal sinkron Google Sheet (${response.code})")
                     }
                 }
             } catch (e: Exception) {
-                Log.e("NotificationDispatcher", "Direct Email dispatch failed", e)
-                DispatchStatusTracker.lastEmailResult = "Error: ${e.localizedMessage}"
-                showToastOnMainThread("Koneksi Email Error: ${e.localizedMessage}")
+                Log.e("NotificationDispatcher", "Google Sheet sync failed", e)
+                DispatchStatusTracker.lastSheetResult = "Error: ${e.localizedMessage}"
+                showToastOnMainThread("Koneksi Sheet Error: ${e.localizedMessage}")
             }
         } else {
-            DispatchStatusTracker.lastEmailResult = "Gagal: Email Admin Kosong"
+            DispatchStatusTracker.lastSheetResult = "Belum diisi / Format URL salah"
         }
 
         true
-    }
-
-    private fun escapeJsonString(input: String): String {
-        val escaped = input
-            .replace("\\", "\\\\")
-            .replace("\"", "\\\"")
-            .replace("\n", "\\n")
-            .replace("\r", "\\r")
-            .replace("\t", "\\t")
-        return "\"$escaped\""
     }
 }

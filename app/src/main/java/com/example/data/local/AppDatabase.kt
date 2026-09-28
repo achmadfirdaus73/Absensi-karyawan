@@ -20,7 +20,7 @@ import kotlinx.coroutines.launch
         AdminNotification::class,
         KioskSettings::class
     ],
-    version = 2, // Bumped to 2 for WhatsApp integration fields
+    version = 3, // Bumped to 3 for Google Sheets URL integration
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

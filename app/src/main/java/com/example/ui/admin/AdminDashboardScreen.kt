@@ -1,5 +1,6 @@
 package com.example.ui.admin
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -829,7 +830,7 @@ fun KioskSettingsTab(
     var officeRadius by remember { mutableStateOf(settings.officeRadiusMeters.toString()) }
     var voiceFeedback by remember { mutableStateOf(settings.soundVoiceFeedback) }
     var autoSync by remember { mutableStateOf(settings.autoSyncToCloud) }
-    var adminEmail by remember { mutableStateOf(settings.adminEmail) }
+    var googleSheetUrl by remember { mutableStateOf(settings.googleSheetUrl) }
     var kioskPin by remember { mutableStateOf(settings.kioskPin) }
     var whatsappNumber by remember { mutableStateOf(settings.adminWhatsappNumber) }
 
@@ -926,18 +927,21 @@ fun KioskSettingsTab(
             }
         }
 
+        var showGuide by remember { mutableStateOf(false) }
+
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = KioskCardBackground),
             shape = RoundedCornerShape(16.dp)
         ) {
             Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Integrasi Notifikasi Admin & Cloud Sync", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                Text("Integrasi Notifikasi Admin & Google Sheet", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
 
                 OutlinedTextField(
-                    value = adminEmail,
-                    onValueChange = { adminEmail = it },
-                    label = { Text("Email Admin Penerima Laporan") },
+                    value = googleSheetUrl,
+                    onValueChange = { googleSheetUrl = it },
+                    label = { Text("Google Sheets Web App URL") },
+                    placeholder = { Text("https://script.google.com/macros/s/.../exec") },
                     modifier = Modifier.fillMaxWidth(),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = CyanNeon,
@@ -946,6 +950,66 @@ fun KioskSettingsTab(
                         unfocusedTextColor = Color.White
                     )
                 )
+
+                // Panduan Setup Google Sheet
+                OutlinedButton(
+                    onClick = { showGuide = !showGuide },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = CyanNeon),
+                    border = BorderStroke(1.dp, CyanNeon)
+                ) {
+                    Text(if (showGuide) "Sembunyikan Panduan Google Sheet 📋" else "Cara Hubungkan ke Google Sheet 📋")
+                }
+                
+                if (showGuide) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A)),
+                        border = BorderStroke(1.dp, Color(0xFF334155))
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("Langkah Cepat Setup Google Sheets:", color = CyanNeon, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            Text("1. Buat Google Sheet baru di Google Drive.\n" +
+                                 "2. Klik menu 'Extensions' -> 'Apps Script'.\n" +
+                                 "3. Hapus semua kode bawaan, lalu paste script berikut:", color = Color.White, fontSize = 12.sp)
+                            
+                            // Code box
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B))
+                            ) {
+                                Text(
+                                    text = "function doPost(e) {\n" +
+                                           "  try {\n" +
+                                           "    var data = JSON.parse(e.postData.contents);\n" +
+                                           "    var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();\n" +
+                                           "    sheet.appendRow([\n" +
+                                           "      new Date(),\n" +
+                                           "      data.nama,\n" +
+                                           "      data.nik,\n" +
+                                           "      data.divisi,\n" +
+                                           "      data.waktu,\n" +
+                                           "      data.status,\n" +
+                                           "      data.punctuality,\n" +
+                                           "      data.lokasi\n" +
+                                           "    ]);\n" +
+                                           "    return ContentService.createTextOutput(JSON.stringify({'status':'success'})).setMimeType(ContentService.MimeType.JSON);\n" +
+                                           "  } catch(err) {\n" +
+                                           "    return ContentService.createTextOutput(JSON.stringify({'status':'error', 'message': err.toString()})).setMimeType(ContentService.MimeType.JSON);\n" +
+                                           "  }\n" +
+                                           "}",
+                                    color = Color(0xFFE2E8F0),
+                                    fontSize = 11.sp,
+                                    modifier = Modifier.padding(10.dp)
+                                )
+                            }
+                            
+                            Text("4. Klik 'Deploy' -> 'New deployment' -> Pilih type 'Web app'.\n" +
+                                 "5. Di bagian 'Who has access', pilih 'Anyone'.\n" +
+                                 "6. Klik Deploy, lalu copy URL Web App hasil deploy ke kolom di atas!", color = Color.White, fontSize = 12.sp)
+                        }
+                    }
+                }
 
                 OutlinedTextField(
                     value = whatsappNumber,
@@ -973,8 +1037,8 @@ fun KioskSettingsTab(
                             Text(com.example.network.DispatchStatusTracker.lastWaResult, color = if (com.example.network.DispatchStatusTracker.lastWaResult.contains("Sukses")) EmeraldSuccess else Color.LightGray, fontSize = 12.sp)
                         }
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("Email: ", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                            Text(com.example.network.DispatchStatusTracker.lastEmailResult, color = if (com.example.network.DispatchStatusTracker.lastEmailResult.contains("Sukses")) EmeraldSuccess else Color.LightGray, fontSize = 12.sp)
+                            Text("Google Sheet: ", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            Text(com.example.network.DispatchStatusTracker.lastSheetResult, color = if (com.example.network.DispatchStatusTracker.lastSheetResult.contains("Sukses")) EmeraldSuccess else Color.LightGray, fontSize = 12.sp)
                         }
                     }
                 }
@@ -1016,7 +1080,7 @@ fun KioskSettingsTab(
                     officeRadiusMeters = officeRadius.toDoubleOrNull() ?: 50.0,
                     soundVoiceFeedback = voiceFeedback,
                     autoSyncToCloud = autoSync,
-                    adminEmail = adminEmail.trim(),
+                    googleSheetUrl = googleSheetUrl.trim(),
                     kioskPin = kioskPin.trim(),
                     adminWhatsappNumber = whatsappNumber.trim()
                 )

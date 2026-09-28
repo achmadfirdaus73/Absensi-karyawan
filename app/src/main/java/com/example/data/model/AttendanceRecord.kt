@@ -56,7 +56,7 @@ data class KioskSettings(
     val officeRadiusMeters: Double = 150.0,
     val officeAddress: String = "Gedung Cyber Tower Lt. 12, Kuningan, Jakarta Selatan",
     val geofenceStrict: Boolean = false,
-    val adminEmail: String = "admin.hr@digitalnusantara.id",
+    val googleSheetUrl: String = "",
     val adminTelegramChatId: String = "",
     val adminTelegramBotToken: String = "",
     val adminTelegramWebhookUrl: String = "https://api.telegram.org/bot/notify",

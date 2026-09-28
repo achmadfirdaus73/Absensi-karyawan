@@ -235,7 +235,7 @@ class AttendanceViewModel(
             // Dispatch to Admin Webhook (Silent, no screen popup)
             notificationDispatcher.dispatchToAdmin(
                 record = record,
-                adminEmail = settings.adminEmail,
+                googleSheetUrl = settings.googleSheetUrl,
                 adminWhatsappNumber = settings.adminWhatsappNumber
             )
 
@@ -301,7 +301,7 @@ class AttendanceViewModel(
             // Dispatch to Admin Webhook (Silent, no screen popup)
             notificationDispatcher.dispatchToAdmin(
                 record = record,
-                adminEmail = settings.adminEmail,
+                googleSheetUrl = settings.googleSheetUrl,
                 adminWhatsappNumber = settings.adminWhatsappNumber
             )
 
@@ -360,7 +360,7 @@ class AttendanceViewModel(
             val settings = kioskSettings.value ?: KioskSettings()
             notificationDispatcher.dispatchToAdmin(
                 record = record,
-                adminEmail = settings.adminEmail,
+                googleSheetUrl = settings.googleSheetUrl,
                 adminWhatsappNumber = settings.adminWhatsappNumber
             )
         }
