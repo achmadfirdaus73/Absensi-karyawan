@@ -11,15 +11,21 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material.icons.filled.Login
+import androidx.compose.material.icons.filled.Logout
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -35,20 +41,19 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.example.data.model.AttendanceType
 import com.example.data.model.Employee
-import com.example.data.model.GestureType
+import com.example.ui.theme.AmberCheckout
 import com.example.ui.theme.CyanNeon
 import com.example.ui.theme.EmeraldSuccess
 
 @Composable
 fun BiometricHudOverlay(
     recognizedEmployee: Employee?,
-    activeGesture: GestureType?,
-    countdownProgress: Float = 0f,
+    onActionClick: (AttendanceType) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Box(modifier = modifier.fillMaxSize()) {
-        // ONLY the Detected Employee Badge appears when a face is detected (Zero buttons)
         AnimatedVisibility(
             visible = recognizedEmployee != null,
             enter = fadeIn() + slideInVertically(initialOffsetY = { it / 2 }),
@@ -59,24 +64,24 @@ fun BiometricHudOverlay(
         ) {
             if (recognizedEmployee != null) {
                 Surface(
-                    shape = RoundedCornerShape(22.dp),
+                    shape = RoundedCornerShape(24.dp),
                     color = Color(0xF20A1124),
                     border = androidx.compose.foundation.BorderStroke(1.5.dp, CyanNeon),
-                    shadowElevation = 12.dp
+                    shadowElevation = 14.dp
                 ) {
                     Column(
-                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp),
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
-                        // Employee Info Row (Photo + Name + Department + Progress Ring)
+                        // Employee Info Row (Photo + Name + Department)
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(14.dp)
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .size(52.dp)
+                                    .size(54.dp)
                                     .clip(CircleShape)
                                     .border(2.dp, CyanNeon, CircleShape),
                                 contentAlignment = Alignment.Center
@@ -90,15 +95,6 @@ fun BiometricHudOverlay(
                                     contentScale = ContentScale.Crop,
                                     modifier = Modifier.fillMaxSize()
                                 )
-
-                                if (countdownProgress > 0f) {
-                                    CircularProgressIndicator(
-                                        progress = { countdownProgress },
-                                        color = EmeraldSuccess,
-                                        strokeWidth = 3.dp,
-                                        modifier = Modifier.fillMaxSize()
-                                    )
-                                }
                             }
 
                             Column {
@@ -110,13 +106,13 @@ fun BiometricHudOverlay(
                                         text = recognizedEmployee.name,
                                         color = Color.White,
                                         fontWeight = FontWeight.Bold,
-                                        fontSize = 17.sp
+                                        fontSize = 18.sp
                                     )
                                     Icon(
                                         imageVector = Icons.Default.CheckCircle,
                                         contentDescription = "Terverifikasi",
                                         tint = EmeraldSuccess,
-                                        modifier = Modifier.size(17.dp)
+                                        modifier = Modifier.size(18.dp)
                                     )
                                 }
 
@@ -128,23 +124,56 @@ fun BiometricHudOverlay(
                             }
                         }
 
-                        // Real-time Gestures Guide / Detection Status Badge
-                        Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = Color(0xFF1E293B)
+                        // Direct tactile interactive selection: Masuk / Pulang
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            Text(
-                                text = when {
-                                    activeGesture == GestureType.THUMBS_UP -> "👍 Gestur Jempol Terdeteksi • Memproses Masuk..."
-                                    activeGesture == GestureType.OPEN_HAND -> "🖐️ Gestur 5 Jari Terdeteksi • Memproses Pulang..."
-                                    countdownProgress > 0f -> "Memverifikasi Wajah... Tahan sebentar"
-                                    else -> "Wajah Terverifikasi • Acungkan 👍 Masuk / 🖐️ Pulang"
-                                },
-                                color = if (activeGesture != null || countdownProgress > 0f) EmeraldSuccess else Color(0xFF94A3B8),
-                                fontSize = 11.sp,
-                                fontWeight = if (activeGesture != null || countdownProgress > 0f) FontWeight.Bold else FontWeight.Normal,
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
-                            )
+                            Button(
+                                onClick = { onActionClick(AttendanceType.CHECK_IN) },
+                                colors = ButtonDefaults.buttonColors(containerColor = EmeraldSuccess),
+                                shape = RoundedCornerShape(16.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(48.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Login,
+                                    contentDescription = null,
+                                    tint = Color.Black,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "MASUK",
+                                    color = Color.Black,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.sp
+                                )
+                            }
+
+                            Button(
+                                onClick = { onActionClick(AttendanceType.CHECK_OUT) },
+                                colors = ButtonDefaults.buttonColors(containerColor = AmberCheckout),
+                                shape = RoundedCornerShape(16.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(48.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Logout,
+                                    contentDescription = null,
+                                    tint = Color.Black,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "PULANG",
+                                    color = Color.Black,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.sp
+                                )
+                            }
                         }
                     }
                 }

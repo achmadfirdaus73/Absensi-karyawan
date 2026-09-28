@@ -42,8 +42,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
-import com.example.biometrics.HandGestureDetector
-import com.example.data.model.GestureType
 import com.example.ui.theme.CyanNeon
 import com.example.ui.theme.EmeraldSuccess
 import com.example.ui.theme.KioskDarkBackground
@@ -68,7 +66,7 @@ private fun isEmulatorEnvironment(): Boolean {
 @Composable
 fun CameraPreview(
     isFrontCamera: Boolean,
-    onVisionEvent: (hasFace: Boolean, gesture: GestureType?) -> Unit,
+    onVisionEvent: (hasFace: Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -100,8 +98,6 @@ fun CameraPreview(
             .build()
         FaceDetection.getClient(options)
     }
-
-    val gestureDetector = remember { HandGestureDetector() }
 
     LaunchedEffect(Unit) {
         if (!hasCameraPermission) {
@@ -167,18 +163,10 @@ fun CameraPreview(
 
                                         faceDetector.process(image)
                                             .addOnSuccessListener { faces ->
-                                                if (faces.isNotEmpty()) {
-                                                    val face = faces[0]
-                                                    val detectedGesture = gestureDetector.analyzeFrame(imageProxy, face.boundingBox)
-                                                    onVisionEvent(true, detectedGesture)
-                                                } else {
-                                                    gestureDetector.reset()
-                                                    onVisionEvent(false, null)
-                                                }
+                                                onVisionEvent(faces.isNotEmpty())
                                             }
                                             .addOnFailureListener {
-                                                gestureDetector.reset()
-                                                onVisionEvent(false, null)
+                                                onVisionEvent(false)
                                             }
                                             .addOnCompleteListener {
                                                 imageProxy.close()
