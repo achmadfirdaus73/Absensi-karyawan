@@ -298,6 +298,13 @@ class AttendanceViewModel(
                 cloudSyncManager.syncRecordToCloud(record)
             }
 
+            // Dispatch to Admin Webhook (Silent, no screen popup)
+            notificationDispatcher.dispatchToAdmin(
+                record = record,
+                adminEmail = settings.adminEmail,
+                adminWhatsappNumber = settings.adminWhatsappNumber
+            )
+
             audioHelper.playSuccessChime()
             val actionText = if (type == AttendanceType.CHECK_IN) "Absen Masuk berhasil dicatat, Selamat bekerja ${employee.name}" else "Absen Pulang berhasil dicatat, Sampai jumpa ${employee.name}"
             audioHelper.speak(actionText)
@@ -341,7 +348,7 @@ class AttendanceViewModel(
         viewModelScope.launch {
             val matchedEmployee = activeEmployees.value.firstOrNull() ?: return@launch
             val loc = _uiState.value.locationInfo
-            repository.recordAttendance(
+            val record = repository.recordAttendance(
                 employee = matchedEmployee,
                 type = AttendanceType.CHECK_IN,
                 gestureType = GestureType.FACE_ONLY,
@@ -349,6 +356,12 @@ class AttendanceViewModel(
                 longitude = loc.longitude,
                 locationAddress = loc.address,
                 confidence = 1.0f
+            )
+            val settings = kioskSettings.value ?: KioskSettings()
+            notificationDispatcher.dispatchToAdmin(
+                record = record,
+                adminEmail = settings.adminEmail,
+                adminWhatsappNumber = settings.adminWhatsappNumber
             )
         }
     }
