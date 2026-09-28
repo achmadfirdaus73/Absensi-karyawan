@@ -20,7 +20,7 @@ import kotlinx.coroutines.launch
         AdminNotification::class,
         KioskSettings::class
     ],
-    version = 1,
+    version = 2, // Bumped to 2 for WhatsApp integration fields
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -40,6 +40,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "smart_presensi_kiosk.db"
                 )
+                .fallbackToDestructiveMigration()
                 .addCallback(DatabaseCallback())
                 .build()
                 INSTANCE = instance
@@ -61,7 +62,6 @@ abstract class AppDatabase : RoomDatabase() {
                 super.onOpen(db)
                 INSTANCE?.let { database ->
                     CoroutineScope(Dispatchers.IO).launch {
-                        // Purge any dummy template employees on open
                         database.employeeDao().deleteSampleEmployees()
                     }
                 }
@@ -69,7 +69,6 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         private suspend fun populateInitialData(database: AppDatabase) {
-            // Seed Settings only (no dummy employees)
             val defaultSettings = KioskSettings()
             database.kioskSettingsDao().insertOrUpdate(defaultSettings)
         }

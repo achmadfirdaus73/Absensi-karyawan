@@ -832,6 +832,9 @@ fun KioskSettingsTab(
     var telegramWebhook by remember { mutableStateOf(settings.adminTelegramWebhookUrl) }
     var adminEmail by remember { mutableStateOf(settings.adminEmail) }
     var kioskPin by remember { mutableStateOf(settings.kioskPin) }
+    var whatsappNumber by remember { mutableStateOf(settings.adminWhatsappNumber) }
+    var whatsappToken by remember { mutableStateOf(settings.adminWhatsappToken) }
+    var whatsappGateway by remember { mutableStateOf(settings.adminWhatsappGatewayUrl) }
 
     Column(
         modifier = Modifier
@@ -960,6 +963,47 @@ fun KioskSettingsTab(
                     )
                 )
 
+                Text("Integrasi WhatsApp Gateway (Fonnte)", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.White, modifier = Modifier.padding(top = 8.dp))
+
+                OutlinedTextField(
+                    value = whatsappNumber,
+                    onValueChange = { whatsappNumber = it },
+                    label = { Text("Nomor WA Admin HRD (Contoh: 62812345678)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = CyanNeon,
+                        unfocusedBorderColor = Color(0xFF334155),
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White
+                    )
+                )
+
+                OutlinedTextField(
+                    value = whatsappToken,
+                    onValueChange = { whatsappToken = it },
+                    label = { Text("Token API Gateway Fonnte") },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = CyanNeon,
+                        unfocusedBorderColor = Color(0xFF334155),
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White
+                    )
+                )
+
+                OutlinedTextField(
+                    value = whatsappGateway,
+                    onValueChange = { whatsappGateway = it },
+                    label = { Text("URL API Gateway Fonnte") },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = CyanNeon,
+                        unfocusedBorderColor = Color(0xFF334155),
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White
+                    )
+                )
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -999,7 +1043,10 @@ fun KioskSettingsTab(
                     autoSyncToCloud = autoSync,
                     adminTelegramWebhookUrl = telegramWebhook.trim(),
                     adminEmail = adminEmail.trim(),
-                    kioskPin = kioskPin.trim()
+                    kioskPin = kioskPin.trim(),
+                    adminWhatsappNumber = whatsappNumber.trim(),
+                    adminWhatsappToken = whatsappToken.trim(),
+                    adminWhatsappGatewayUrl = whatsappGateway.trim()
                 )
                 onSaveSettings(updated)
             },

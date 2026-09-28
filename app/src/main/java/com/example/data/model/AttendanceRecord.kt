@@ -25,7 +25,7 @@ data class AttendanceRecord(
     val isSyncedToCloud: Boolean = true,
     val syncTimestamp: Long = System.currentTimeMillis(),
     val adminNotified: Boolean = true,
-    val adminNotificationNote: String = "Telegram, Email & In-App terkirim"
+    val adminNotificationNote: String = "Telegram, WhatsApp & Cloud terkirim"
 )
 
 @Entity(tableName = "admin_notifications")
@@ -40,7 +40,7 @@ data class AdminNotification(
     val timestamp: Long = System.currentTimeMillis(),
     val message: String,
     val location: String,
-    val channel: String, // "TELEGRAM", "EMAIL", "IN_APP", "PUSH"
+    val channel: String, // "TELEGRAM", "WHATSAPP", "EMAIL", "IN_APP"
     val status: String,  // "SUCCESS", "PENDING", "FAILED"
     val isRead: Boolean = false
 )
@@ -63,5 +63,8 @@ data class KioskSettings(
     val faceConfidenceThreshold: Float = 0.85f,
     val autoSyncToCloud: Boolean = true,
     val kioskPin: String = "1234",
-    val frontCameraSelected: Boolean = true
+    val frontCameraSelected: Boolean = true,
+    val adminWhatsappNumber: String = "",
+    val adminWhatsappToken: String = "",
+    val adminWhatsappGatewayUrl: String = "https://api.fonnte.com/send"
 )
