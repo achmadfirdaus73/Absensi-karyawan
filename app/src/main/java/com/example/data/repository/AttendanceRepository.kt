@@ -131,12 +131,39 @@ class AttendanceRepository(
 
     private fun calculatePunctuality(employee: Employee, type: AttendanceType, timestamp: Long): PunctualityStatus {
         val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
-        val currentTime = timeFormat.format(Date(timestamp))
+        val currentTimeStr = timeFormat.format(Date(timestamp))
 
         return if (type == AttendanceType.CHECK_IN) {
-            if (currentTime > employee.shiftStart) PunctualityStatus.LATE else PunctualityStatus.ON_TIME
+            if (currentTimeStr > employee.shiftStart) PunctualityStatus.LATE else PunctualityStatus.ON_TIME
         } else {
-            if (currentTime < employee.shiftEnd) PunctualityStatus.EARLY_DEPARTURE else PunctualityStatus.NORMAL
+            if (currentTimeStr < employee.shiftEnd) {
+                PunctualityStatus.EARLY_DEPARTURE
+            } else {
+                try {
+                    val currentParts = currentTimeStr.split(":")
+                    val endParts = employee.shiftEnd.split(":")
+                    if (currentParts.size == 2 && endParts.size == 2) {
+                        val currentMinutes = currentParts[0].toInt() * 60 + currentParts[1].toInt()
+                        val endMinutes = endParts[0].toInt() * 60 + endParts[1].toInt()
+                        
+                        var diff = currentMinutes - endMinutes
+                        // Handle overnight shift checkout on next day
+                        if (diff < -720) {
+                            diff += 1440
+                        }
+                        
+                        if (diff >= 30) {
+                            PunctualityStatus.OVERTIME
+                        } else {
+                            PunctualityStatus.NORMAL
+                        }
+                    } else {
+                        PunctualityStatus.NORMAL
+                    }
+                } catch (e: Exception) {
+                    PunctualityStatus.NORMAL
+                }
+            }
         }
     }
 

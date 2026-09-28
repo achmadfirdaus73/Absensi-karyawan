@@ -60,6 +60,7 @@ import com.example.ui.theme.EmeraldSuccessLight
 import com.example.ui.theme.KioskCardBackground
 import com.example.ui.theme.KioskDarkBackground
 import com.example.ui.theme.RoseError
+import com.example.ui.theme.PurpleTech
 
 @Composable
 fun AttendanceSuccessDialog(
@@ -165,12 +166,14 @@ fun AttendanceSuccessDialog(
                             val punctualityColor = when (record.punctualityStatus) {
                                 PunctualityStatus.ON_TIME -> EmeraldSuccess
                                 PunctualityStatus.LATE -> RoseError
+                                PunctualityStatus.OVERTIME -> PurpleTech
                                 else -> AmberCheckout
                             }
                             val punctualityLabel = when (record.punctualityStatus) {
                                 PunctualityStatus.ON_TIME -> "🟢 Tepat Waktu"
                                 PunctualityStatus.LATE -> "🔴 Terlambat"
                                 PunctualityStatus.EARLY_DEPARTURE -> "🟡 Pulang Awal"
+                                PunctualityStatus.OVERTIME -> "🔵 Lembur"
                                 else -> "Normal"
                             }
                             Text(
