@@ -235,11 +235,8 @@ class AttendanceViewModel(
             // Dispatch to Admin Webhook (Silent, no screen popup)
             notificationDispatcher.dispatchToAdmin(
                 record = record,
-                adminTelegramWebhookUrl = settings.adminTelegramWebhookUrl,
                 adminEmail = settings.adminEmail,
-                adminWhatsappNumber = settings.adminWhatsappNumber,
-                adminWhatsappToken = settings.adminWhatsappToken,
-                adminWhatsappGatewayUrl = settings.adminWhatsappGatewayUrl
+                adminWhatsappNumber = settings.adminWhatsappNumber
             )
 
             // Audio & Voice Cue in Indonesian

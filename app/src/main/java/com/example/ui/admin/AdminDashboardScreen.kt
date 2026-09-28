@@ -829,12 +829,9 @@ fun KioskSettingsTab(
     var officeRadius by remember { mutableStateOf(settings.officeRadiusMeters.toString()) }
     var voiceFeedback by remember { mutableStateOf(settings.soundVoiceFeedback) }
     var autoSync by remember { mutableStateOf(settings.autoSyncToCloud) }
-    var telegramWebhook by remember { mutableStateOf(settings.adminTelegramWebhookUrl) }
     var adminEmail by remember { mutableStateOf(settings.adminEmail) }
     var kioskPin by remember { mutableStateOf(settings.kioskPin) }
     var whatsappNumber by remember { mutableStateOf(settings.adminWhatsappNumber) }
-    var whatsappToken by remember { mutableStateOf(settings.adminWhatsappToken) }
-    var whatsappGateway by remember { mutableStateOf(settings.adminWhatsappGatewayUrl) }
 
     Column(
         modifier = Modifier
@@ -940,7 +937,7 @@ fun KioskSettingsTab(
                 OutlinedTextField(
                     value = adminEmail,
                     onValueChange = { adminEmail = it },
-                    label = { Text("Email Admin Penerima Rekap") },
+                    label = { Text("Email Admin Penerima Laporan") },
                     modifier = Modifier.fillMaxWidth(),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = CyanNeon,
@@ -949,52 +946,11 @@ fun KioskSettingsTab(
                         unfocusedTextColor = Color.White
                     )
                 )
-
-                OutlinedTextField(
-                    value = telegramWebhook,
-                    onValueChange = { telegramWebhook = it },
-                    label = { Text("Webhook URL Bot Telegram Admin (Opsional)") },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = CyanNeon,
-                        unfocusedBorderColor = Color(0xFF334155),
-                        focusedTextColor = Color.White,
-                        unfocusedTextColor = Color.White
-                    )
-                )
-
-                Text("Integrasi WhatsApp Gateway (Fonnte)", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.White, modifier = Modifier.padding(top = 8.dp))
 
                 OutlinedTextField(
                     value = whatsappNumber,
                     onValueChange = { whatsappNumber = it },
                     label = { Text("Nomor WA Admin HRD (Contoh: 62812345678)") },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = CyanNeon,
-                        unfocusedBorderColor = Color(0xFF334155),
-                        focusedTextColor = Color.White,
-                        unfocusedTextColor = Color.White
-                    )
-                )
-
-                OutlinedTextField(
-                    value = whatsappToken,
-                    onValueChange = { whatsappToken = it },
-                    label = { Text("Token API Gateway Fonnte") },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = CyanNeon,
-                        unfocusedBorderColor = Color(0xFF334155),
-                        focusedTextColor = Color.White,
-                        unfocusedTextColor = Color.White
-                    )
-                )
-
-                OutlinedTextField(
-                    value = whatsappGateway,
-                    onValueChange = { whatsappGateway = it },
-                    label = { Text("URL API Gateway Fonnte") },
                     modifier = Modifier.fillMaxWidth(),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = CyanNeon,
@@ -1041,12 +997,9 @@ fun KioskSettingsTab(
                     officeRadiusMeters = officeRadius.toDoubleOrNull() ?: 50.0,
                     soundVoiceFeedback = voiceFeedback,
                     autoSyncToCloud = autoSync,
-                    adminTelegramWebhookUrl = telegramWebhook.trim(),
                     adminEmail = adminEmail.trim(),
                     kioskPin = kioskPin.trim(),
-                    adminWhatsappNumber = whatsappNumber.trim(),
-                    adminWhatsappToken = whatsappToken.trim(),
-                    adminWhatsappGatewayUrl = whatsappGateway.trim()
+                    adminWhatsappNumber = whatsappNumber.trim()
                 )
                 onSaveSettings(updated)
             },
