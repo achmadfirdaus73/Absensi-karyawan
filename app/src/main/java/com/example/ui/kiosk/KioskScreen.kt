@@ -93,30 +93,22 @@ fun KioskScreen(
     var adminPinInput by remember { mutableStateOf("") }
     var adminPinError by remember { mutableStateOf(false) }
 
-    // Live Face Recognition State from ML Kit
+    // Live Face Recognition State
     var isLiveFaceDetected by remember { mutableStateOf(false) }
     var liveFaceCount by remember { mutableStateOf(0) }
     var lastFaceDetectionTime by remember { mutableStateOf(0L) }
 
-    // Currently identified / active person in front of the camera
+    // Currently identified person in front of the camera (null when idle)
     var selectedEmployee by remember { mutableStateOf<Employee?>(null) }
     var isProcessingAttendance by remember { mutableStateOf(false) }
 
-    // Auto-select first employee when list loads if none selected
-    LaunchedEffect(employees) {
-        if (employees.isNotEmpty() && selectedEmployee == null) {
-            selectedEmployee = employees.first()
-        } else if (employees.isEmpty()) {
-            selectedEmployee = null
-        }
-    }
-
-    // Reset face detected flag if no face events in 1.5 seconds
+    // Auto-clear badge when person walks away (no face detected for 2 seconds)
     LaunchedEffect(lastFaceDetectionTime) {
         if (lastFaceDetectionTime > 0) {
-            delay(1500)
-            if (System.currentTimeMillis() - lastFaceDetectionTime >= 1500) {
+            delay(2200)
+            if (System.currentTimeMillis() - lastFaceDetectionTime >= 2000) {
                 isLiveFaceDetected = false
+                selectedEmployee = null
             }
         }
     }
@@ -160,6 +152,7 @@ fun KioskScreen(
                         isLiveFaceDetected = true
                         liveFaceCount = faces.size
                         lastFaceDetectionTime = System.currentTimeMillis()
+                        // If no employee currently active, select first available matching profile
                         if (selectedEmployee == null && employees.isNotEmpty()) {
                             selectedEmployee = employees.first()
                         }
@@ -215,7 +208,7 @@ fun KioskScreen(
                 .scale(scanPulseScale),
             contentAlignment = Alignment.Center
         ) {
-            val bracketColor = if (isLiveFaceDetected) AccentGreen else PrimaryNavy
+            val bracketColor = if (isLiveFaceDetected) AccentGreen else PrimaryNavy.copy(alpha = 0.6f)
 
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val cornerLength = 32.dp.toPx()
@@ -243,7 +236,7 @@ fun KioskScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
-                if (selectedEmployee?.photoUri != null) {
+                if (selectedEmployee?.photoUri != null && isLiveFaceDetected) {
                     Box(
                         modifier = Modifier
                             .size(72.dp)
@@ -261,7 +254,7 @@ fun KioskScreen(
                     Icon(
                         imageVector = Icons.Default.Face,
                         contentDescription = null,
-                        tint = bracketColor.copy(alpha = 0.8f),
+                        tint = bracketColor,
                         modifier = Modifier.size(52.dp)
                     )
                 }
@@ -283,7 +276,7 @@ fun KioskScreen(
                             Box(modifier = Modifier.size(6.dp).background(AccentGreen, CircleShape))
                         }
                         Text(
-                            text = if (isLiveFaceDetected) "Wajah Terdeteksi" else if (selectedEmployee != null) "Wajah Siap" else "Arahkan Wajah",
+                            text = if (isLiveFaceDetected) "Wajah Terdeteksi" else "Arahkan Wajah ke Kamera",
                             color = bracketColor,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.SemiBold
@@ -306,7 +299,7 @@ fun KioskScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Left: Company Name & Address
+                // Left: Company Name & Dynamic Address from GPS
                 Surface(
                     shape = RoundedCornerShape(12.dp),
                     color = PureWhite.copy(alpha = 0.96f),
@@ -411,20 +404,25 @@ fun KioskScreen(
             }
         }
 
-        // 4. 🪪 REFINED WHITE COMPACT BADGE CARD
-        if (employees.isNotEmpty()) {
-            val emp = selectedEmployee ?: employees.first()
+        // 4. 🪪 REFINED WHITE COMPACT BADGE CARD (Only appears when someone is in front of camera)
+        AnimatedVisibility(
+            visible = isLiveFaceDetected && selectedEmployee != null,
+            enter = fadeIn(tween(200)) + slideInVertically(initialOffsetY = { it / 2 }),
+            exit = fadeOut(tween(200)) + slideOutVertically(targetOffsetY = { it / 2 }),
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(horizontal = 14.dp, vertical = 10.dp)
+        ) {
+            val emp = selectedEmployee ?: return@AnimatedVisibility
             val shiftResolution = repository.resolveShiftForEmployee(emp, settings)
 
             Column(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .navigationBarsPadding()
-                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.Bottom
             ) {
-                // Quick Employee Switcher (Compact Minimalist)
+                // Quick Employee Switcher (If multiple coworkers arrive together)
                 if (employees.size > 1) {
                     LazyRow(
                         modifier = Modifier
@@ -587,11 +585,14 @@ fun KioskScreen(
                                             val record = repository.processAttendance(
                                                 employee = emp,
                                                 checkType = CheckType.CHECK_IN,
-                                                confidenceScore = if (isLiveFaceDetected) 0.99f else 0.95f
+                                                confidenceScore = 0.99f
                                             )
                                             val statusText = if (record.status == AttendanceStatus.ON_TIME) "Tepat Waktu" else "Terlambat"
                                             audioHelper.speak("Terima kasih ${emp.name}, berhasil Absen Masuk $statusText!")
                                             lastSuccessRecord = record
+                                            // IMMEDIATELY RESET SO BADGE DISAPPEARS FOR NEXT PERSON
+                                            selectedEmployee = null
+                                            isLiveFaceDetected = false
                                             isProcessingAttendance = false
                                         }
                                     }
@@ -614,11 +615,14 @@ fun KioskScreen(
                                             val record = repository.processAttendance(
                                                 employee = emp,
                                                 checkType = CheckType.CHECK_OUT,
-                                                confidenceScore = if (isLiveFaceDetected) 0.99f else 0.95f
+                                                confidenceScore = 0.99f
                                             )
                                             val statusText = if (record.status == AttendanceStatus.OVERTIME) "Lembur" else "Berhasil"
                                             audioHelper.speak("Terima kasih ${emp.name}, berhasil Absen Pulang $statusText!")
                                             lastSuccessRecord = record
+                                            // IMMEDIATELY RESET SO BADGE DISAPPEARS FOR NEXT PERSON
+                                            selectedEmployee = null
+                                            isLiveFaceDetected = false
                                             isProcessingAttendance = false
                                         }
                                     }
@@ -642,7 +646,12 @@ fun KioskScreen(
     if (lastSuccessRecord != null) {
         AttendanceSuccessDialog(
             record = lastSuccessRecord!!,
-            onDismiss = { lastSuccessRecord = null }
+            onDismiss = {
+                lastSuccessRecord = null
+                // Ensure fresh clean state when dialog closes
+                selectedEmployee = null
+                isLiveFaceDetected = false
+            }
         )
     }
 

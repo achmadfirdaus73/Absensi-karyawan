@@ -4,8 +4,10 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
+import android.location.Geocoder
 import android.location.Location
 import android.location.LocationManager
+import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -593,6 +595,44 @@ fun KioskSettingsTab(
     var googleSheetsUrl by remember { mutableStateOf(settings.googleSheetsUrl) }
     var gpsStatusMessage by remember { mutableStateOf<String?>(null) }
 
+    fun processLocation(loc: Location) {
+        latitude = loc.latitude
+        longitude = loc.longitude
+        try {
+            val geocoder = Geocoder(context, Locale("id", "ID"))
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                geocoder.getFromLocation(loc.latitude, loc.longitude, 1) { addresses ->
+                    if (addresses.isNotEmpty()) {
+                        val addr = addresses[0]
+                        val thoroughfare = addr.thoroughfare ?: ""
+                        val subLoc = addr.subLocality ?: ""
+                        val locality = addr.locality ?: addr.subAdminArea ?: ""
+                        val parts = listOf(thoroughfare, subLoc, locality).filter { it.isNotBlank() }
+                        if (parts.isNotEmpty()) {
+                            address = parts.joinToString(", ")
+                        }
+                    }
+                }
+            } else {
+                @Suppress("DEPRECATION")
+                val addresses = geocoder.getFromLocation(loc.latitude, loc.longitude, 1)
+                if (!addresses.isNullOrEmpty()) {
+                    val addr = addresses[0]
+                    val thoroughfare = addr.thoroughfare ?: ""
+                    val subLoc = addr.subLocality ?: ""
+                    val locality = addr.locality ?: addr.subAdminArea ?: ""
+                    val parts = listOf(thoroughfare, subLoc, locality).filter { it.isNotBlank() }
+                    if (parts.isNotEmpty()) {
+                        address = parts.joinToString(", ")
+                    }
+                }
+            }
+            gpsStatusMessage = "Lokasi GPS berhasil diperbarui: $address"
+        } catch (_: Exception) {
+            gpsStatusMessage = "Koordinat GPS: ${String.format("%.4f", loc.latitude)}, ${String.format("%.4f", loc.longitude)}"
+        }
+    }
+
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
@@ -604,9 +644,7 @@ fun KioskSettingsTab(
                 val loc: Location? = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER)
                     ?: lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
                 if (loc != null) {
-                    latitude = loc.latitude
-                    longitude = loc.longitude
-                    gpsStatusMessage = "Lokasi GPS berhasil diperbarui."
+                    processLocation(loc)
                 } else {
                     gpsStatusMessage = "GPS aktif. Pastikan sinyal lokasi tersedia."
                 }
@@ -647,7 +685,7 @@ fun KioskSettingsTab(
                 OutlinedTextField(
                     value = address,
                     onValueChange = { address = it },
-                    label = { Text("Alamat / Lokasi Kantor") },
+                    label = { Text("Alamat Kantor (Diperbarui Otomatis via GPS)") },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     shape = RoundedCornerShape(8.dp),
@@ -666,7 +704,7 @@ fun KioskSettingsTab(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column {
-                                Text("Koordinat GPS Kantor", color = TextPrimaryLight, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                                Text("Titik GPS Kantor", color = TextPrimaryLight, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
                                 Text("Lat: ${String.format("%.4f", latitude)}, Long: ${String.format("%.4f", longitude)}", color = TextSecondaryLight, fontSize = 11.sp)
                             }
 
@@ -679,9 +717,9 @@ fun KioskSettingsTab(
                                             val loc: Location? = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER)
                                                 ?: lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
                                             if (loc != null) {
-                                                latitude = loc.latitude
-                                                longitude = loc.longitude
-                                                gpsStatusMessage = "Lokasi GPS kantor diperbarui."
+                                                processLocation(loc)
+                                            } else {
+                                                gpsStatusMessage = "Menunggu sinyal GPS..."
                                             }
                                         } catch (_: Exception) {}
                                     } else {
@@ -692,7 +730,7 @@ fun KioskSettingsTab(
                                 shape = RoundedCornerShape(6.dp),
                                 contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
                             ) {
-                                Text("Ambil GPS", color = PureWhite, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                                Text("Ambil Alamat GPS", color = PureWhite, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                             }
                         }
 
