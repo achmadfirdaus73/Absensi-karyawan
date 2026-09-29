@@ -3,75 +3,61 @@ package com.example.data.model
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
+enum class CheckType {
+    CHECK_IN,
+    CHECK_OUT
+}
+
+enum class AttendanceStatus {
+    ON_TIME,          // Tepat Waktu
+    LATE,             // Terlambat
+    EARLY_DEPARTURE,  // Pulang Cepat
+    OVERTIME          // Lembur
+}
+
 @Entity(tableName = "attendance_records")
 data class AttendanceRecord(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
     val employeeId: Long,
-    val employeeCode: String,
     val employeeName: String,
-    val department: String,
-    val type: AttendanceType,
-    val gestureType: GestureType,
+    val nik: String,
+    val role: String,
+    val shiftName: String,
     val timestamp: Long = System.currentTimeMillis(),
-    val formattedDate: String, // e.g. "27 Sep 2026"
-    val formattedTime: String, // e.g. "08:15:22 WIB"
-    val latitude: Double,
-    val longitude: Double,
-    val locationAddress: String,
-    val punctualityStatus: PunctualityStatus,
-    val photoSnapshotUri: String = "",
+    val checkType: CheckType,
+    val status: AttendanceStatus,
     val confidenceScore: Float = 0.95f,
-    val isSyncedToCloud: Boolean = true,
-    val syncTimestamp: Long = System.currentTimeMillis(),
-    val adminNotified: Boolean = true,
-    val adminNotificationNote: String = "Telegram, WhatsApp & Cloud terkirim"
-)
-
-@Entity(tableName = "admin_notifications")
-data class AdminNotification(
-    @PrimaryKey(autoGenerate = true)
-    val id: Long = 0,
-    val attendanceId: Long,
-    val employeeName: String,
-    val employeeCode: String,
-    val attendanceType: AttendanceType,
-    val gestureUsed: GestureType,
-    val timestamp: Long = System.currentTimeMillis(),
-    val message: String,
-    val location: String,
-    val channel: String, // "TELEGRAM", "WHATSAPP", "EMAIL", "IN_APP"
-    val status: String,  // "SUCCESS", "PENDING", "FAILED"
-    val isRead: Boolean = false
+    val photoUri: String? = null,
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+    val note: String = ""
 )
 
 @Entity(tableName = "kiosk_settings")
 data class KioskSettings(
     @PrimaryKey
     val id: Int = 1,
-    val kioskName: String = "Wall Tablet Kiosk - Lobby Utama",
-    val companyName: String = "PT Digital Nusantara Utama",
-    val officeLatitude: Double = -6.2088,
-    val officeLongitude: Double = 106.8456,
-    val officeRadiusMeters: Double = 150.0,
-    val officeAddress: String = "Gedung Cyber Tower Lt. 12, Kuningan, Jakarta Selatan",
-    val geofenceStrict: Boolean = false,
-    val googleSheetUrl: String = "",
-    val adminTelegramChatId: String = "",
-    val adminTelegramBotToken: String = "",
-    val adminTelegramWebhookUrl: String = "https://api.telegram.org/bot/notify",
-    val soundVoiceFeedback: Boolean = true,
+    val companyName: String = "PT Sinar Digital Nusantara",
+    val address: String = "Jl. Sudirman No. 88, Jakarta Selatan",
+    val latitude: Double = -6.2088,
+    val longitude: Double = 106.8456,
+    val radiusMeters: Double = 150.0,
+    val kioskPin: String = "8888",
     val faceConfidenceThreshold: Float = 0.85f,
-    val autoSyncToCloud: Boolean = true,
-    val kioskPin: String = "1234",
-    val frontCameraSelected: Boolean = true,
-    val adminWhatsappNumber: String = "",
-    val adminWhatsappToken: String = "",
-    val adminWhatsappGatewayUrl: String = "https://api.fonnte.com/send",
+    // Shift 1 (Pagi)
     val shift1Start: String = "08:00",
-    val shift1End: String = "17:00",
-    val shift2Start: String = "14:00",
-    val shift2End: String = "22:00",
-    val shift3Start: String = "22:00",
-    val shift3End: String = "06:00"
+    val shift1End: String = "16:00",
+    // Shift 2 (Siang/Sore)
+    val shift2Start: String = "16:00",
+    val shift2End: String = "00:00",
+    // Shift 3 (Malam)
+    val shift3Start: String = "00:00",
+    val shift3End: String = "08:00",
+    // Integrasi Cloud
+    val fonnteApiKey: String = "",
+    val fonnteAdminWa: String = "",
+    val googleSheetsUrl: String = "",
+    val lastSheetsSyncStatus: String = "Belum terhubung",
+    val ttsVoiceEnabled: Boolean = true
 )

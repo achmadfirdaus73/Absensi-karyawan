@@ -1,83 +1,56 @@
 package com.example.ui.kiosk
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.scaleIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.CloudDone
-import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.NotificationsActive
-import androidx.compose.material.icons.filled.PanTool
-import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material.icons.filled.ThumbUp
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
 import com.example.data.model.AttendanceRecord
-import com.example.data.model.AttendanceType
-import com.example.data.model.GestureType
-import com.example.data.model.PunctualityStatus
-import com.example.ui.theme.AmberCheckout
-import com.example.ui.theme.CyanNeon
-import com.example.ui.theme.EmeraldSuccess
-import com.example.ui.theme.EmeraldSuccessLight
-import com.example.ui.theme.KioskCardBackground
-import com.example.ui.theme.KioskDarkBackground
-import com.example.ui.theme.RoseError
-import com.example.ui.theme.PurpleTech
+import com.example.data.model.AttendanceStatus
+import com.example.data.model.CheckType
+import com.example.ui.theme.*
+import java.text.SimpleDateFormat
+import java.util.*
 
 @Composable
 fun AttendanceSuccessDialog(
     record: AttendanceRecord,
     onDismiss: () -> Unit
 ) {
-    val isCheckIn = record.type == AttendanceType.CHECK_IN
-    val mainColor = if (isCheckIn) EmeraldSuccess else AmberCheckout
+    val isCheckIn = record.checkType == CheckType.CHECK_IN
+    val timeFormat = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
+    val dateFormat = SimpleDateFormat("EEEE, dd MMMM yyyy", Locale("id", "ID"))
+    val recordDate = Date(record.timestamp)
+
+    val (statusText, statusBg, statusTextColor) = when (record.status) {
+        AttendanceStatus.ON_TIME -> Triple("TEPAT WAKTU", NeonGreen.copy(alpha = 0.2f), NeonGreen)
+        AttendanceStatus.LATE -> Triple("TERLAMBAT", NeonRed.copy(alpha = 0.2f), NeonRed)
+        AttendanceStatus.EARLY_DEPARTURE -> Triple("PULANG AWAL", NeonYellow.copy(alpha = 0.2f), NeonYellow)
+        AttendanceStatus.OVERTIME -> Triple("LEMBUR", NeonPurple.copy(alpha = 0.2f), NeonPurple)
+    }
 
     Dialog(onDismissRequest = onDismiss) {
-        Surface(
+        Card(
             modifier = Modifier
-                .fillMaxWidth(0.95f)
-                .clip(RoundedCornerShape(28.dp))
-                .border(2.dp, mainColor.copy(alpha = 0.8f), RoundedCornerShape(28.dp)),
-            color = KioskDarkBackground,
-            tonalElevation = 12.dp
+                .fillMaxWidth()
+                .padding(16.dp)
+                .border(2.dp, NeonCyan, RoundedCornerShape(24.dp)),
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(containerColor = CardBg)
         ) {
             Column(
                 modifier = Modifier
@@ -85,22 +58,17 @@ fun AttendanceSuccessDialog(
                     .padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Success Badge Header
                 Box(
                     modifier = Modifier
-                        .size(76.dp)
-                        .clip(CircleShape)
-                        .background(
-                            Brush.radialGradient(
-                                colors = listOf(mainColor, mainColor.copy(alpha = 0.3f))
-                            )
-                        ),
+                        .size(72.dp)
+                        .background(NeonGreen.copy(alpha = 0.2f), CircleShape)
+                        .border(2.dp, NeonGreen, CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Default.CheckCircle,
                         contentDescription = "Success",
-                        tint = Color.White,
+                        tint = NeonGreen,
                         modifier = Modifier.size(44.dp)
                     )
                 }
@@ -108,233 +76,113 @@ fun AttendanceSuccessDialog(
                 Spacer(modifier = Modifier.height(16.dp))
 
                 Text(
-                    text = if (isCheckIn) "PRESENSI MASUK BERHASIL" else "PRESENSI PULANG BERHASIL",
-                    fontSize = 22.sp,
+                    text = if (isCheckIn) "ABSEN MASUK BERHASIL!" else "ABSEN PULANG BERHASIL!",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = if (isCheckIn) NeonCyan else NeonGreen,
                     fontWeight = FontWeight.Bold,
-                    color = mainColor
+                    textAlign = TextAlign.Center
                 )
+
+                Spacer(modifier = Modifier.height(6.dp))
 
                 Text(
-                    text = "Identitas & Gestur Terverifikasi Secara Real-Time",
-                    fontSize = 13.sp,
-                    color = Color(0xFF94A3B8)
+                    text = dateFormat.format(recordDate),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TextSecondary
                 )
 
-                Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
-                // Employee Card
+                // Employee Info Card
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = KioskCardBackground),
-                    shape = RoundedCornerShape(18.dp)
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = InputBg)
                 ) {
-                    Row(
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        AsyncImage(
-                            model = ImageRequest.Builder(LocalContext.current)
-                                .data(record.photoSnapshotUri.ifBlank { "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200" })
-                                .crossfade(true)
-                                .build(),
-                            contentDescription = record.employeeName,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier
-                                .size(64.dp)
-                                .clip(CircleShape)
-                                .border(2.dp, CyanNeon, CircleShape)
-                        )
-
-                        Spacer(modifier = Modifier.width(16.dp))
-
-                        Column {
-                            Text(
-                                text = record.employeeName,
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
-                            )
-                            Text(
-                                text = "${record.employeeCode} • ${record.department}",
-                                fontSize = 13.sp,
-                                color = Color(0xFFCBD5E1)
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            // Punctuality Badge
-                            val punctualityColor = when (record.punctualityStatus) {
-                                PunctualityStatus.ON_TIME -> EmeraldSuccess
-                                PunctualityStatus.LATE -> RoseError
-                                PunctualityStatus.OVERTIME -> PurpleTech
-                                else -> AmberCheckout
-                            }
-                            val punctualityLabel = when (record.punctualityStatus) {
-                                PunctualityStatus.ON_TIME -> "🟢 Tepat Waktu"
-                                PunctualityStatus.LATE -> "🔴 Terlambat"
-                                PunctualityStatus.EARLY_DEPARTURE -> "🟡 Pulang Awal"
-                                PunctualityStatus.OVERTIME -> "🔵 Lembur"
-                                else -> "Normal"
-                            }
-                            Text(
-                                text = punctualityLabel,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = punctualityColor
-                            )
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                // Metadata Details: Gesture, Time, Location
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(Color(0xFF131D31), RoundedCornerShape(16.dp))
-                        .padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    // Gesture Row
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Icon(
-                                imageVector = if (record.gestureType == GestureType.THUMBS_UP) Icons.Default.ThumbUp else Icons.Default.PanTool,
-                                contentDescription = "Gestur",
-                                tint = mainColor,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Text("Verifikasi Gestur:", fontSize = 13.sp, color = Color(0xFF94A3B8))
-                        }
                         Text(
-                            text = when (record.gestureType) {
-                                GestureType.THUMBS_UP -> "👍 Jempol / SIP (100%)"
-                                GestureType.OPEN_HAND -> "🖐️ 5 Jari Terbuka (100%)"
-                                GestureType.FACE_ONLY -> "👤 Wajah Terverifikasi"
-                                GestureType.MANUAL_PIN -> "🔢 PIN Manual"
-                            },
-                            fontSize = 13.sp,
+                            text = record.employeeName,
+                            style = MaterialTheme.typography.headlineMedium,
                             fontWeight = FontWeight.Bold,
-                            color = Color.White
+                            color = TextPrimary
                         )
-                    }
 
-                    // Timestamp Row
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+                        Spacer(modifier = Modifier.height(4.dp))
+
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.Schedule,
-                                contentDescription = "Waktu",
-                                tint = CyanNeon,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Text("Waktu Presensi:", fontSize = 13.sp, color = Color(0xFF94A3B8))
-                        }
-                        Text(
-                            text = "${record.formattedDate}, ${record.formattedTime}",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Color.White
-                        )
-                    }
-
-                    // Location Row
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.LocationOn,
-                                contentDescription = "Lokasi",
-                                tint = Color(0xFF38BDF8),
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Text("Lokasi GPS:", fontSize = 13.sp, color = Color(0xFF94A3B8))
-                        }
-                        Text(
-                            text = record.locationAddress.take(28) + if (record.locationAddress.length > 28) "..." else "",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = Color(0xFFE2E8F0)
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                // Cloud Sync & Admin Alert Badges
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Surface(
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(12.dp),
-                        color = EmeraldSuccess.copy(alpha = 0.15f),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, EmeraldSuccess.copy(alpha = 0.4f))
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.CloudDone,
-                                contentDescription = "Cloud",
-                                tint = EmeraldSuccess,
-                                modifier = Modifier.size(16.dp)
-                            )
+                            Surface(
+                                color = NeonPurple.copy(alpha = 0.2f),
+                                shape = RoundedCornerShape(6.dp)
+                            ) {
+                                Text(
+                                    text = record.role,
+                                    color = NeonPurple,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                )
+                            }
                             Text(
-                                text = "Cloud Synced",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = EmeraldSuccessLight
+                                text = "NIK: ${record.nik}",
+                                color = TextMuted,
+                                fontSize = 13.sp
                             )
                         }
-                    }
 
-                    Surface(
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(12.dp),
-                        color = CyanNeon.copy(alpha = 0.15f),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, CyanNeon.copy(alpha = 0.4f))
-                    ) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        HorizontalDivider(color = CardBorder)
+                        Spacer(modifier = Modifier.height(12.dp))
+
                         Row(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.NotificationsActive,
-                                contentDescription = "Admin Notified",
-                                tint = CyanNeon,
-                                modifier = Modifier.size(16.dp)
-                            )
+                            Column {
+                                Text(text = "Jam Presensi", color = TextSecondary, fontSize = 12.sp)
+                                Text(
+                                    text = timeFormat.format(recordDate),
+                                    color = NeonCyan,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 18.sp
+                                )
+                            }
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text(text = "Status Kerja", color = TextSecondary, fontSize = 12.sp)
+                                Surface(
+                                    color = statusBg,
+                                    shape = RoundedCornerShape(6.dp)
+                                ) {
+                                    Text(
+                                        text = statusText,
+                                        color = statusTextColor,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(text = "Shift / Jadwal", color = TextSecondary, fontSize = 12.sp)
                             Text(
-                                text = "Admin Notified",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = CyanNeon
+                                text = record.shiftName,
+                                color = TextPrimary,
+                                fontWeight = FontWeight.Medium,
+                                fontSize = 13.sp
                             )
                         }
                     }
@@ -344,18 +192,11 @@ fun AttendanceSuccessDialog(
 
                 Button(
                     onClick = onDismiss,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = mainColor)
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = NeonCyan)
                 ) {
-                    Text(
-                        text = "Tutup (Otomatis)",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.Black
-                    )
+                    Text(text = "Tutup", color = DarkBg, fontWeight = FontWeight.Bold)
                 }
             }
         }

@@ -14,20 +14,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 @Database(
-    entities = [
-        Employee::class,
-        AttendanceRecord::class,
-        AdminNotification::class,
-        KioskSettings::class
-    ],
-    version = 3, // Bumped to 3 for Google Sheets URL integration
+    entities = [Employee::class, AttendanceRecord::class, KioskSettings::class, AdminNotification::class],
+    version = 2,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun employeeDao(): EmployeeDao
     abstract fun attendanceDao(): AttendanceDao
-    abstract fun adminNotificationDao(): AdminNotificationDao
-    abstract fun kioskSettingsDao(): KioskSettingsDao
+    abstract fun notificationDao(): NotificationDao
 
     companion object {
         @Volatile
@@ -40,37 +34,53 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "smart_presensi_kiosk.db"
                 )
-                .fallbackToDestructiveMigration()
-                .addCallback(DatabaseCallback())
-                .build()
+                    .fallbackToDestructiveMigration()
+                    .addCallback(object : Callback() {
+                        override fun onCreate(db: SupportSQLiteDatabase) {
+                            super.onCreate(db)
+                            CoroutineScope(Dispatchers.IO).launch {
+                                val database = getDatabase(context)
+                                database.attendanceDao().saveKioskSettings(KioskSettings())
+                                // Seed default demo employees
+                                database.employeeDao().insertEmployee(
+                                    Employee(
+                                        name = "Budi Santoso",
+                                        nik = "EMP-001",
+                                        division = "Teknologi Informasi",
+                                        role = "Manager",
+                                        shiftType = "MANUAL_CUSTOM",
+                                        customStartTime = "09:00",
+                                        customEndTime = "18:00",
+                                        pin = "1111"
+                                    )
+                                )
+                                database.employeeDao().insertEmployee(
+                                    Employee(
+                                        name = "Siti Rahmawati",
+                                        nik = "EMP-002",
+                                        division = "Operasional",
+                                        role = "Staff",
+                                        shiftType = "AUTO_DETECT",
+                                        pin = "2222"
+                                    )
+                                )
+                                database.employeeDao().insertEmployee(
+                                    Employee(
+                                        name = "Ahmad Hidayat",
+                                        nik = "EMP-003",
+                                        division = "Keamanan",
+                                        role = "Security",
+                                        shiftType = "SHIFT_3",
+                                        pin = "3333"
+                                    )
+                                )
+                            }
+                        }
+                    })
+                    .build()
                 INSTANCE = instance
                 instance
             }
-        }
-
-        private class DatabaseCallback : RoomDatabase.Callback() {
-            override fun onCreate(db: SupportSQLiteDatabase) {
-                super.onCreate(db)
-                INSTANCE?.let { database ->
-                    CoroutineScope(Dispatchers.IO).launch {
-                        populateInitialData(database)
-                    }
-                }
-            }
-
-            override fun onOpen(db: SupportSQLiteDatabase) {
-                super.onOpen(db)
-                INSTANCE?.let { database ->
-                    CoroutineScope(Dispatchers.IO).launch {
-                        database.employeeDao().deleteSampleEmployees()
-                    }
-                }
-            }
-        }
-
-        private suspend fun populateInitialData(database: AppDatabase) {
-            val defaultSettings = KioskSettings()
-            database.kioskSettingsDao().insertOrUpdate(defaultSettings)
         }
     }
 }

@@ -1,147 +1,82 @@
 package com.example.ui.admin
 
-import android.graphics.Bitmap
-import android.net.Uri
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.activity.result.launch
-import androidx.activity.result.PickVisualMediaRequest
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AddAPhoto
-import androidx.compose.material.icons.filled.Badge
-import androidx.compose.material.icons.filled.Business
-import androidx.compose.material.icons.filled.CameraAlt
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Collections
-import androidx.compose.material.icons.filled.Email
-import androidx.compose.material.icons.filled.Face
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Phone
-import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import androidx.compose.foundation.BorderStroke
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
+import androidx.compose.ui.window.DialogProperties
 import com.example.data.model.Employee
-import com.example.ui.theme.CyanNeon
-import com.example.ui.theme.CyanNeonLight
-import com.example.ui.theme.EmeraldSuccess
-import com.example.ui.theme.EmeraldSuccessLight
-import com.example.ui.theme.KioskCardBackground
-import com.example.ui.theme.KioskCardBorder
-import com.example.ui.theme.KioskDarkBackground
-import com.example.ui.theme.KioskDarkSurface
-import java.io.File
-import java.io.FileOutputStream
+import com.example.data.model.KioskSettings
+import com.example.data.model.ShiftAssignmentType
+import com.example.ui.theme.*
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RegisterEmployeeDialog(
-    initialEmployee: Employee? = null,
+    employeeToEdit: Employee? = null,
+    kioskSettings: KioskSettings,
     onDismiss: () -> Unit,
-    onSave: (Employee) -> Unit
+    onSaveEmployee: (Employee) -> Unit
 ) {
-    val context = LocalContext.current
-    val isEditMode = initialEmployee != null
-
-    var name by remember { mutableStateOf(initialEmployee?.name ?: "") }
-    var code by remember { mutableStateOf(initialEmployee?.employeeCode ?: "EMP-${(1000..9999).random()}") }
-    var department by remember { mutableStateOf(initialEmployee?.department ?: "Operasional") }
-    var role by remember { mutableStateOf(initialEmployee?.role ?: "Staff") }
-    var email by remember { mutableStateOf(initialEmployee?.email ?: "") }
-    var phone by remember { mutableStateOf(initialEmployee?.phone ?: "08") }
-    var shiftStart by remember { mutableStateOf(initialEmployee?.shiftStart ?: "08:00") }
-    var shiftEnd by remember { mutableStateOf(initialEmployee?.shiftEnd ?: "17:00") }
+    var name by remember { mutableStateOf(employeeToEdit?.name ?: "") }
+    var nik by remember { mutableStateOf(employeeToEdit?.nik ?: "") }
+    var division by remember { mutableStateOf(employeeToEdit?.division ?: "Operasional") }
+    var role by remember { mutableStateOf(employeeToEdit?.role ?: "Staff") }
+    var customRoleText by remember { mutableStateOf("") }
     
-    var capturedBitmap by remember { mutableStateOf<Bitmap?>(null) }
-    var photoUriString by remember { mutableStateOf(initialEmployee?.photoUri ?: "") }
-
-    // Camera Capture Launcher (Take Photo directly)
-    val cameraLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.TakePicturePreview()
-    ) { bitmap ->
-        if (bitmap != null) {
-            capturedBitmap = bitmap
+    // Shift selection
+    var selectedShiftType by remember {
+        mutableStateOf(
             try {
-                val file = File(context.cacheDir, "face_${System.currentTimeMillis()}.jpg")
-                FileOutputStream(file).use { out ->
-                    bitmap.compress(Bitmap.CompressFormat.JPEG, 90, out)
-                }
-                photoUriString = Uri.fromFile(file).toString()
-            } catch (e: Exception) {
-                // Ignore file save error
+                ShiftAssignmentType.valueOf(employeeToEdit?.shiftType ?: ShiftAssignmentType.AUTO_DETECT.name)
+            } catch (_: Exception) {
+                ShiftAssignmentType.AUTO_DETECT
             }
-        }
+        )
     }
+    var customStartTime by remember { mutableStateOf(employeeToEdit?.customStartTime ?: "09:00") }
+    var customEndTime by remember { mutableStateOf(employeeToEdit?.customEndTime ?: "18:00") }
+    var pin by remember { mutableStateOf(employeeToEdit?.pin ?: "1234") }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
 
-    // Photo Picker Launcher (Pick from Gallery)
-    val photoPickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.PickVisualMedia()
-    ) { uri: Uri? ->
-        if (uri != null) {
-            photoUriString = uri.toString()
-            capturedBitmap = null
-        }
-    }
+    var isShiftDropdownExpanded by remember { mutableStateOf(false) }
+    var isRoleDropdownExpanded by remember { mutableStateOf(false) }
 
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(
+    val standardRoles = listOf("Manager", "Supervisor", "Staff", "Security", "Cleaning Service", "Admin", "Lainnya...")
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Card(
             modifier = Modifier
-                .fillMaxWidth(0.96f)
-                .clip(RoundedCornerShape(24.dp)),
-            color = KioskDarkSurface,
-            border = androidx.compose.foundation.BorderStroke(1.dp, KioskCardBorder)
+                .fillMaxWidth(0.92f)
+                .fillMaxHeight(0.92f)
+                .border(1.5.dp, NeonCyan.copy(alpha = 0.5f), RoundedCornerShape(24.dp)),
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(containerColor = CardBg)
         ) {
             Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(20.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
+                    .fillMaxSize()
+                    .padding(24.dp)
             ) {
                 // Header
                 Row(
@@ -151,293 +86,443 @@ fun RegisterEmployeeDialog(
                 ) {
                     Column {
                         Text(
-                            text = if (isEditMode) "Edit Data Karyawan" else "Daftar Karyawan & Wajah Biometrik",
-                            fontSize = 17.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
+                            text = if (employeeToEdit == null) "Daftarkan Karyawan Baru" else "Edit Data Karyawan",
+                            style = MaterialTheme.typography.titleLarge,
+                            color = NeonCyan,
+                            fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = "Sinkronisasi Identitas Biometrik Wajah",
-                            fontSize = 11.sp,
-                            color = Color(0xFF94A3B8)
+                            text = "Konfigurasikan profil, role jabatan, dan jam kerja",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = TextSecondary
                         )
                     }
                     IconButton(onClick = onDismiss) {
-                        Icon(Icons.Default.Close, contentDescription = "Tutup", tint = Color.White)
+                        Icon(Icons.Default.Close, contentDescription = "Close", tint = TextSecondary)
                     }
                 }
 
-                // Face Photo Enrollment Section
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    color = KioskDarkBackground,
-                    border = androidx.compose.foundation.BorderStroke(1.dp, CyanNeon.copy(alpha = 0.3f))
+                Spacer(modifier = Modifier.height(16.dp))
+                HorizontalDivider(color = CardBorder)
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Scrollable Form
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    Column(
+                    // 1. Nama Lengkap
+                    OutlinedTextField(
+                        value = name,
+                        onValueChange = { name = it },
+                        label = { Text("Nama Lengkap Karyawan") },
+                        leadingIcon = { Icon(Icons.Default.Person, contentDescription = null, tint = NeonCyan) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = NeonCyan,
+                            unfocusedBorderColor = CardBorder,
+                            focusedTextColor = TextPrimary,
+                            unfocusedTextColor = TextPrimary
+                        )
+                    )
+
+                    // 2. NIK & Divisi
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = nik,
+                            onValueChange = { nik = it },
+                            label = { Text("NIK / ID") },
+                            leadingIcon = { Icon(Icons.Default.Badge, contentDescription = null, tint = NeonCyan) },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = NeonCyan,
+                                unfocusedBorderColor = CardBorder,
+                                focusedTextColor = TextPrimary,
+                                unfocusedTextColor = TextPrimary
+                            )
+                        )
+
+                        OutlinedTextField(
+                            value = division,
+                            onValueChange = { division = it },
+                            label = { Text("Divisi / Departemen") },
+                            leadingIcon = { Icon(Icons.Default.CorporateFare, contentDescription = null, tint = NeonCyan) },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = NeonCyan,
+                                unfocusedBorderColor = CardBorder,
+                                focusedTextColor = TextPrimary,
+                                unfocusedTextColor = TextPrimary
+                            )
+                        )
+                    }
+
+                    // 3. Role / Jabatan (Dropdown)
+                    Column {
+                        Text(
+                            text = "Jabatan / Role Karyawan",
+                            color = TextSecondary,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        ExposedDropdownMenuBox(
+                            expanded = isRoleDropdownExpanded,
+                            onExpandedChange = { isRoleDropdownExpanded = it }
+                        ) {
+                            OutlinedTextField(
+                                value = role,
+                                onValueChange = {},
+                                readOnly = true,
+                                label = { Text("Pilih Role") },
+                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = isRoleDropdownExpanded) },
+                                leadingIcon = { Icon(Icons.Default.Work, contentDescription = null, tint = NeonPurple) },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .menuAnchor(),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = NeonPurple,
+                                    unfocusedBorderColor = CardBorder,
+                                    focusedTextColor = TextPrimary,
+                                    unfocusedTextColor = TextPrimary
+                                )
+                            )
+
+                            ExposedDropdownMenu(
+                                expanded = isRoleDropdownExpanded,
+                                onDismissRequest = { isRoleDropdownExpanded = false },
+                                modifier = Modifier.background(CardBg)
+                            ) {
+                                standardRoles.forEach { r ->
+                                    DropdownMenuItem(
+                                        text = { Text(r, color = TextPrimary) },
+                                        onClick = {
+                                            if (r == "Lainnya...") {
+                                                role = "Lainnya"
+                                            } else {
+                                                role = r
+                                            }
+                                            isRoleDropdownExpanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+
+                        if (role == "Lainnya") {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            OutlinedTextField(
+                                value = customRoleText,
+                                onValueChange = { customRoleText = it },
+                                label = { Text("Ketik Nama Jabatan Khusus") },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = NeonPurple,
+                                    unfocusedBorderColor = CardBorder,
+                                    focusedTextColor = TextPrimary,
+                                    unfocusedTextColor = TextPrimary
+                                )
+                            )
+                        }
+                    }
+
+                    // 4. Pengaturan Jam Kerja / Shift (DROPDOWN FITUR UTAMA)
+                    Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(14.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                            .border(1.dp, NeonCyan.copy(alpha = 0.3f), RoundedCornerShape(16.dp)),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = InputBg)
                     ) {
-                        Text(
-                            text = "📸 FOTO WAJAH UNTUK DETEKSI OTOMATIS",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = CyanNeonLight,
-                            letterSpacing = 1.sp
-                        )
-
-                        Box(
+                        Column(
                             modifier = Modifier
-                                .size(96.dp)
-                                .clip(CircleShape)
-                                .background(Color(0xFF1E293B))
-                                .border(2.dp, CyanNeon, CircleShape),
-                            contentAlignment = Alignment.Center
+                                .fillMaxWidth()
+                                .padding(16.dp)
                         ) {
-                            if (capturedBitmap != null) {
-                                Image(
-                                    bitmap = capturedBitmap!!.asImageBitmap(),
-                                    contentDescription = "Foto Wajah",
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                            } else if (photoUriString.isNotBlank()) {
-                                AsyncImage(
-                                    model = ImageRequest.Builder(context)
-                                        .data(photoUriString)
-                                        .crossfade(true)
-                                        .build(),
-                                    contentDescription = "Foto Wajah",
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                            } else {
-                                Icon(
-                                    imageVector = Icons.Default.Face,
-                                    contentDescription = null,
-                                    tint = Color(0xFF64748B),
-                                    modifier = Modifier.size(48.dp)
-                                )
-                            }
-                        }
-
-                        // Buttons to Capture or Select Face Photo
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Button(
-                                onClick = { cameraLauncher.launch() },
-                                colors = ButtonDefaults.buttonColors(containerColor = CyanNeon),
-                                shape = RoundedCornerShape(10.dp)
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.CameraAlt,
-                                    contentDescription = null,
-                                    tint = Color.Black,
-                                    modifier = Modifier.size(16.dp)
+                                Icon(Icons.Default.Schedule, contentDescription = null, tint = NeonCyan)
+                                Text(
+                                    text = "Konfigurasi Waktu Kerja & Shift",
+                                    color = NeonCyan,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 15.sp
                                 )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Ambil Foto", color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                             }
 
-                            OutlinedButton(
-                                onClick = {
-                                    photoPickerLauncher.launch(
-                                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "Tentukan apakah karyawan mengikuti shift otomatis kantor atau jadwal khusus role",
+                                color = TextMuted,
+                                fontSize = 12.sp
+                            )
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            // Shift Dropdown Selector
+                            ExposedDropdownMenuBox(
+                                expanded = isShiftDropdownExpanded,
+                                onExpandedChange = { isShiftDropdownExpanded = it }
+                            ) {
+                                val currentShiftLabel = when (selectedShiftType) {
+                                    ShiftAssignmentType.AUTO_DETECT -> "🔄 Sesuai Shift Kantor (Auto-Detect)"
+                                    ShiftAssignmentType.SHIFT_1 -> "☀️ Shift 1 Tetap (${kioskSettings.shift1Start} - ${kioskSettings.shift1End})"
+                                    ShiftAssignmentType.SHIFT_2 -> "⛅ Shift 2 Tetap (${kioskSettings.shift2Start} - ${kioskSettings.shift2End})"
+                                    ShiftAssignmentType.SHIFT_3 -> "🌙 Shift 3 Tetap (${kioskSettings.shift3Start} - ${kioskSettings.shift3End})"
+                                    ShiftAssignmentType.MANUAL_CUSTOM -> "✍️ Masukkan Jam Kerja Khusus (Manual)"
+                                }
+
+                                OutlinedTextField(
+                                    value = currentShiftLabel,
+                                    onValueChange = {},
+                                    readOnly = true,
+                                    label = { Text("Mode Waktu Kerja") },
+                                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = isShiftDropdownExpanded) },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .menuAnchor(),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedBorderColor = NeonCyan,
+                                        unfocusedBorderColor = CardBorder,
+                                        focusedTextColor = TextPrimary,
+                                        unfocusedTextColor = TextPrimary
                                     )
-                                },
-                                shape = RoundedCornerShape(10.dp),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF475569))
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Collections,
-                                    contentDescription = null,
-                                    tint = Color.White,
-                                    modifier = Modifier.size(16.dp)
                                 )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Galeri", color = Color.White, fontSize = 12.sp)
+
+                                ExposedDropdownMenu(
+                                    expanded = isShiftDropdownExpanded,
+                                    onDismissRequest = { isShiftDropdownExpanded = false },
+                                    modifier = Modifier.background(CardBg)
+                                ) {
+                                    DropdownMenuItem(
+                                        text = {
+                                            Column {
+                                                Text("🔄 Sesuai Shift Kantor (Auto-Detect)", color = NeonCyan, fontWeight = FontWeight.Bold)
+                                                Text("Otomatis mendeteksi Shift 1, 2, atau 3 kantor", color = TextSecondary, fontSize = 11.sp)
+                                            }
+                                        },
+                                        onClick = {
+                                            selectedShiftType = ShiftAssignmentType.AUTO_DETECT
+                                            isShiftDropdownExpanded = false
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = {
+                                            Column {
+                                                Text("☀️ Shift 1 Tetap (Pagi)", color = TextPrimary, fontWeight = FontWeight.Bold)
+                                                Text("Jam ${kioskSettings.shift1Start} s/d ${kioskSettings.shift1End}", color = TextSecondary, fontSize = 11.sp)
+                                            }
+                                        },
+                                        onClick = {
+                                            selectedShiftType = ShiftAssignmentType.SHIFT_1
+                                            isShiftDropdownExpanded = false
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = {
+                                            Column {
+                                                Text("⛅ Shift 2 Tetap (Siang/Sore)", color = TextPrimary, fontWeight = FontWeight.Bold)
+                                                Text("Jam ${kioskSettings.shift2Start} s/d ${kioskSettings.shift2End}", color = TextSecondary, fontSize = 11.sp)
+                                            }
+                                        },
+                                        onClick = {
+                                            selectedShiftType = ShiftAssignmentType.SHIFT_2
+                                            isShiftDropdownExpanded = false
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = {
+                                            Column {
+                                                Text("🌙 Shift 3 Tetap (Malam)", color = TextPrimary, fontWeight = FontWeight.Bold)
+                                                Text("Jam ${kioskSettings.shift3Start} s/d ${kioskSettings.shift3End}", color = TextSecondary, fontSize = 11.sp)
+                                            }
+                                        },
+                                        onClick = {
+                                            selectedShiftType = ShiftAssignmentType.SHIFT_3
+                                            isShiftDropdownExpanded = false
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = {
+                                            Column {
+                                                Text("✍️ Masukkan Jam Khusus (Manual)", color = NeonYellow, fontWeight = FontWeight.Bold)
+                                                Text("Tentukan jam masuk & pulang fleksibel (misal Manager)", color = TextSecondary, fontSize = 11.sp)
+                                            }
+                                        },
+                                        onClick = {
+                                            selectedShiftType = ShiftAssignmentType.MANUAL_CUSTOM
+                                            isShiftDropdownExpanded = false
+                                        }
+                                    )
+                                }
+                            }
+
+                            // If MANUAL_CUSTOM is selected, show custom time inputs!
+                            if (selectedShiftType == ShiftAssignmentType.MANUAL_CUSTOM) {
+                                Spacer(modifier = Modifier.height(14.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    OutlinedTextField(
+                                        value = customStartTime,
+                                        onValueChange = { customStartTime = it },
+                                        label = { Text("Jam Masuk (HH:mm)") },
+                                        placeholder = { Text("09:00") },
+                                        leadingIcon = { Icon(Icons.Default.Login, contentDescription = null, tint = NeonGreen) },
+                                        singleLine = true,
+                                        modifier = Modifier.weight(1f),
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedBorderColor = NeonGreen,
+                                            unfocusedBorderColor = CardBorder,
+                                            focusedTextColor = TextPrimary,
+                                            unfocusedTextColor = TextPrimary
+                                        )
+                                    )
+
+                                    OutlinedTextField(
+                                        value = customEndTime,
+                                        onValueChange = { customEndTime = it },
+                                        label = { Text("Jam Pulang (HH:mm)") },
+                                        placeholder = { Text("18:00") },
+                                        leadingIcon = { Icon(Icons.Default.Logout, contentDescription = null, tint = NeonYellow) },
+                                        singleLine = true,
+                                        modifier = Modifier.weight(1f),
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedBorderColor = NeonYellow,
+                                            unfocusedBorderColor = CardBorder,
+                                            focusedTextColor = TextPrimary,
+                                            unfocusedTextColor = TextPrimary
+                                        )
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                    text = "💡 Contoh: Manager masuk 09:00 pulang 18:00. Toleransi telat 15 menit.",
+                                    color = NeonYellow.copy(alpha = 0.8f),
+                                    fontSize = 11.sp
+                                )
                             }
                         }
-
-                        Text(
-                            text = "Pastikan wajah terlihat jelas tanpa masker saat pengambilan foto.",
-                            fontSize = 10.sp,
-                            color = Color(0xFF94A3B8),
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                        )
                     }
-                }
 
-                // Nama Lengkap
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text("Nama Lengkap Karyawan *") },
-                    leadingIcon = { Icon(Icons.Default.Person, contentDescription = null, tint = CyanNeon) },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = CyanNeon,
-                        unfocusedBorderColor = Color(0xFF334155),
-                        focusedTextColor = Color.White,
-                        unfocusedTextColor = Color.White
-                    )
-                )
-
-                // NIK & Departemen
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    // 5. PIN Cadangan Karyawan
                     OutlinedTextField(
-                        value = code,
-                        onValueChange = { code = it },
-                        label = { Text("NIK / NIP *") },
-                        leadingIcon = { Icon(Icons.Default.Badge, contentDescription = null, tint = CyanNeon) },
-                        modifier = Modifier.weight(1f),
+                        value = pin,
+                        onValueChange = { if (it.length <= 6) pin = it },
+                        label = { Text("PIN Karyawan (Untuk Presensi Manual)") },
+                        leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null, tint = NeonCyan) },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = CyanNeon,
-                            unfocusedBorderColor = Color(0xFF334155),
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White
+                            focusedBorderColor = NeonCyan,
+                            unfocusedBorderColor = CardBorder,
+                            focusedTextColor = TextPrimary,
+                            unfocusedTextColor = TextPrimary
                         )
                     )
-                    OutlinedTextField(
-                        value = department,
-                        onValueChange = { department = it },
-                        label = { Text("Departemen / Divisi") },
-                        leadingIcon = { Icon(Icons.Default.Business, contentDescription = null, tint = CyanNeon) },
-                        modifier = Modifier.weight(1f),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = CyanNeon,
-                            unfocusedBorderColor = Color(0xFF334155),
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White
-                        )
-                    )
-                }
 
-                // Jabatan / Posisi
-                OutlinedTextField(
-                    value = role,
-                    onValueChange = { role = it },
-                    label = { Text("Jabatan / Posisi Kerja *") },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = CyanNeon,
-                        unfocusedBorderColor = Color(0xFF334155),
-                        focusedTextColor = Color.White,
-                        unfocusedTextColor = Color.White
-                    )
-                )
-
-                // Info Card: Auto-Detect Shift
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A)),
-                    border = BorderStroke(1.dp, CyanNeon.copy(alpha = 0.4f)),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                    // 6. Biometrik Info Box
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        color = NeonCyan.copy(alpha = 0.08f),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan.copy(alpha = 0.2f))
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Schedule,
-                            contentDescription = "Auto Shift",
-                            tint = CyanNeon,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Column {
-                            Text(
-                                text = "Auto-Detect Shift Aktif 🕒",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
-                            )
-                            Text(
-                                text = "Karyawan ini otomatis dicocokkan ke Shift 1, 2, atau 3 sesuai jam absen terdekat saat di depan Kiosk.",
-                                fontSize = 11.sp,
-                                color = Color(0xFF94A3B8)
-                            )
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Icon(Icons.Default.Face, contentDescription = null, tint = NeonCyan)
+                            Column {
+                                Text(
+                                    text = "Pendaftaran Wajah Biometrik",
+                                    color = NeonCyan,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp
+                                )
+                                Text(
+                                    text = "Wajah akan otomatis terdeteksi dan terdaftar saat karyawan melakukan presensi perdana di kamera Kiosk.",
+                                    color = TextSecondary,
+                                    fontSize = 11.sp
+                                )
+                            }
                         }
+                    }
+
+                    if (errorMessage != null) {
+                        Text(
+                            text = errorMessage!!,
+                            color = NeonRed,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium
+                        )
                     }
                 }
 
-                // Kontak (Email & Phone)
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OutlinedTextField(
-                        value = email,
-                        onValueChange = { email = it },
-                        label = { Text("Email") },
-                        leadingIcon = { Icon(Icons.Default.Email, contentDescription = null, tint = CyanNeon) },
-                        modifier = Modifier.weight(1f),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = CyanNeon,
-                            unfocusedBorderColor = Color(0xFF334155),
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White
-                        )
-                    )
-                    OutlinedTextField(
-                        value = phone,
-                        onValueChange = { phone = it },
-                        label = { Text("No. WhatsApp / HP") },
-                        leadingIcon = { Icon(Icons.Default.Phone, contentDescription = null, tint = CyanNeon) },
-                        modifier = Modifier.weight(1f),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = CyanNeon,
-                            unfocusedBorderColor = Color(0xFF334155),
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White
-                        )
-                    )
-                }
+                Spacer(modifier = Modifier.height(16.dp))
+                HorizontalDivider(color = CardBorder)
+                Spacer(modifier = Modifier.height(16.dp))
 
-                Spacer(modifier = Modifier.height(6.dp))
+                // Actions Footer
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.weight(1f).height(48.dp),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("Batal", color = TextSecondary)
+                    }
 
-                // Submit Button
-                Button(
-                    onClick = {
-                        if (name.isNotBlank() && code.isNotBlank()) {
-                            val finalPhotoUri = if (photoUriString.isNotBlank()) {
-                                photoUriString
+                    Button(
+                        onClick = {
+                            val finalRole = if (role == "Lainnya") {
+                                if (customRoleText.isNotBlank()) customRoleText.trim() else "Karyawan"
                             } else {
-                                "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300"
+                                role
                             }
 
-                            val cleanName = name.trim()
-                            val emp = Employee(
-                                id = initialEmployee?.id ?: 0,
-                                employeeCode = code.trim(),
-                                name = cleanName,
-                                department = department.trim(),
-                                role = role.trim(),
-                                email = if (email.isBlank()) "${cleanName.lowercase().replace(" ", ".")}@company.com" else email.trim(),
-                                phone = phone.trim(),
-                                shiftStart = shiftStart.trim(),
-                                shiftEnd = shiftEnd.trim(),
-                                photoUri = finalPhotoUri,
-                                faceFeaturesJson = """{"descriptor": [0.45, 0.65, 0.88, 0.32, 0.77], "tag": "${cleanName.lowercase().replace(" ", "_")}"}""",
-                                isActive = initialEmployee?.isActive ?: true
-                            )
-                            onSave(emp)
-                        }
-                    },
-                    enabled = name.isNotBlank() && code.isNotBlank(),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(50.dp),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = CyanNeon)
-                ) {
-                    Text(
-                        text = if (isEditMode) "Simpan Perubahan Karyawan" else "Simpan & Daftarkan Biometrik Wajah",
-                        fontWeight = FontWeight.Bold,
-                        color = Color.Black,
-                        fontSize = 14.sp
-                    )
+                            if (name.isBlank() || nik.isBlank()) {
+                                errorMessage = "Mohon isi Nama Lengkap dan NIK"
+                            } else {
+                                val employee = (employeeToEdit ?: Employee(name = "", nik = "", division = "")).copy(
+                                    name = name.trim(),
+                                    nik = nik.trim(),
+                                    division = division.trim(),
+                                    role = finalRole,
+                                    shiftType = selectedShiftType.name,
+                                    customStartTime = customStartTime.trim(),
+                                    customEndTime = customEndTime.trim(),
+                                    pin = pin.trim()
+                                )
+                                onSaveEmployee(employee)
+                            }
+                        },
+                        modifier = Modifier.weight(1f).height(48.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = NeonCyan)
+                    ) {
+                        Icon(Icons.Default.Save, contentDescription = null, tint = DarkBg)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Simpan Karyawan", color = DarkBg, fontWeight = FontWeight.Bold)
+                    }
                 }
             }
         }

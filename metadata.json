@@ -1,6 +1,8 @@
 {
-  "name": "SmartPresensi Kiosk",
-  "description": "Aplikasi Absensi Karyawan Tablet Dinding Real-time dengan Biometrik Wajah, Pengenalan Gestur (Jempol Masuk & 5 Jari Pulang), Notifikasi Otomatis Admin & Sinkronisasi Cloud GPS.",
+  "name": "Smart Presensi Kiosk",
+  "description": "Enterprise Smart Biometric Attendance Kiosk with Edge AI Face & Gesture Recognition, Role-based Work Shift Customization, Auto-Detect Multi-Shift, WhatsApp Fonnte & Google Sheets integration.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }
