@@ -6,6 +6,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -22,20 +23,27 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.core.content.ContextCompat
+import coil.compose.AsyncImage
 import com.example.data.model.*
 import com.example.data.repository.AttendanceRepository
 import com.example.ui.theme.*
 import com.example.util.AudioFeedbackHelper
+import com.google.mlkit.vision.face.Face
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -85,6 +93,11 @@ fun KioskScreen(
     var adminPinInput by remember { mutableStateOf("") }
     var adminPinError by remember { mutableStateOf(false) }
 
+    // Live Face Recognition State from ML Kit
+    var isLiveFaceDetected by remember { mutableStateOf(false) }
+    var liveFaceCount by remember { mutableStateOf(0) }
+    var lastFaceDetectionTime by remember { mutableStateOf(0L) }
+
     // Currently identified / active person in front of the camera
     var selectedEmployee by remember { mutableStateOf<Employee?>(null) }
     var isProcessingAttendance by remember { mutableStateOf(false) }
@@ -93,22 +106,34 @@ fun KioskScreen(
     LaunchedEffect(employees) {
         if (employees.isNotEmpty() && selectedEmployee == null) {
             selectedEmployee = employees.first()
+        } else if (employees.isEmpty()) {
+            selectedEmployee = null
         }
     }
 
-    // Scanning animation
+    // Reset face detected flag if no face events in 1.5 seconds
+    LaunchedEffect(lastFaceDetectionTime) {
+        if (lastFaceDetectionTime > 0) {
+            delay(1500)
+            if (System.currentTimeMillis() - lastFaceDetectionTime >= 1500) {
+                isLiveFaceDetected = false
+            }
+        }
+    }
+
+    // Biometric Scanner Pulse animation
     val infiniteTransition = rememberInfiniteTransition(label = "pulse")
     val scanPulseScale by infiniteTransition.animateFloat(
-        initialValue = 0.96f,
-        targetValue = 1.04f,
+        initialValue = 0.98f,
+        targetValue = 1.02f,
         animationSpec = infiniteRepeatable(
-            animation = tween(1000, easing = EaseInOutSine),
+            animation = tween(1400, easing = EaseInOutSine),
             repeatMode = RepeatMode.Reverse
         ),
         label = "scanPulse"
     )
 
-    // Clock ticker
+    // Live clock ticker
     LaunchedEffect(Unit) {
         val timeFormat = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
         val dateFormat = SimpleDateFormat("EEEE, dd MMMM yyyy", Locale("id", "ID"))
@@ -123,46 +148,57 @@ fun KioskScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(DarkBg)
+            .background(LightBg)
     ) {
-        // 1. Fullscreen Live Camera Background
+        // 1. FULLSCREEN LIVE CAMERA
         if (hasCameraPermission) {
             LiveCameraPreview(
                 modifier = Modifier.fillMaxSize(),
-                useFrontCamera = useFrontCamera
+                useFrontCamera = useFrontCamera,
+                onFacesDetected = { faces: List<Face> ->
+                    if (faces.isNotEmpty()) {
+                        isLiveFaceDetected = true
+                        liveFaceCount = faces.size
+                        lastFaceDetectionTime = System.currentTimeMillis()
+                        if (selectedEmployee == null && employees.isNotEmpty()) {
+                            selectedEmployee = employees.first()
+                        }
+                    }
+                }
             )
         } else {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(DarkBg),
+                    .background(LightBg),
                 contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(Icons.Default.VideocamOff, contentDescription = null, tint = TextMuted, modifier = Modifier.size(64.dp))
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text("Izin Kamera Diperlukan", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                    Spacer(modifier = Modifier.height(6.dp))
+                    Icon(Icons.Default.VideocamOff, contentDescription = null, tint = TextSecondaryLight, modifier = Modifier.size(48.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text("Izin Kamera Diperlukan", color = TextPrimaryLight, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Spacer(modifier = Modifier.height(8.dp))
                     Button(
                         onClick = { cameraPermissionLauncher.launch(Manifest.permission.CAMERA) },
-                        colors = ButtonDefaults.buttonColors(containerColor = NeonCyan)
+                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryNavy),
+                        shape = RoundedCornerShape(10.dp)
                     ) {
-                        Text("Izinkan Kamera", color = DarkBg, fontWeight = FontWeight.Bold)
+                        Text("Izinkan Kamera", color = PureWhite, fontWeight = FontWeight.Bold)
                     }
                 }
             }
         }
 
-        // Dark gradient overlays for pristine readability
+        // Clean subtle light gradient for top and bottom readability
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(
                     Brush.verticalGradient(
                         colors = listOf(
-                            DarkBg.copy(alpha = 0.75f),
+                            PureWhite.copy(alpha = 0.85f),
                             Color.Transparent,
-                            DarkBg.copy(alpha = 0.90f)
+                            PureWhite.copy(alpha = 0.80f)
                         ),
                         startY = 0f,
                         endY = Float.POSITIVE_INFINITY
@@ -170,48 +206,86 @@ fun KioskScreen(
                 )
         )
 
-        // 2. Center Biometric Face Target HUD
+        // 2. 🔲 MINIMALIST BIOMETRIC FACE RETICLE
         Box(
             modifier = Modifier
                 .align(Alignment.Center)
-                .padding(bottom = 120.dp),
+                .padding(bottom = 80.dp)
+                .size(230.dp)
+                .scale(scanPulseScale),
             contentAlignment = Alignment.Center
         ) {
-            // Scanner Ring
-            Box(
-                modifier = Modifier
-                    .size(240.dp)
-                    .scale(scanPulseScale)
-                    .border(
-                        width = 3.dp,
-                        brush = Brush.sweepGradient(listOf(NeonCyan, NeonGreen, NeonPurple, NeonCyan)),
-                        shape = CircleShape
-                    ),
-                contentAlignment = Alignment.Center
+            val bracketColor = if (isLiveFaceDetected) AccentGreen else PrimaryNavy
+
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val cornerLength = 32.dp.toPx()
+                val strokeWidth = 3.dp.toPx()
+
+                // Top-Left Corner
+                drawLine(color = bracketColor, start = Offset(0f, cornerLength), end = Offset(0f, 0f), strokeWidth = strokeWidth, cap = StrokeCap.Round)
+                drawLine(color = bracketColor, start = Offset(0f, 0f), end = Offset(cornerLength, 0f), strokeWidth = strokeWidth, cap = StrokeCap.Round)
+
+                // Top-Right Corner
+                drawLine(color = bracketColor, start = Offset(size.width - cornerLength, 0f), end = Offset(size.width, 0f), strokeWidth = strokeWidth, cap = StrokeCap.Round)
+                drawLine(color = bracketColor, start = Offset(size.width, 0f), end = Offset(size.width, cornerLength), strokeWidth = strokeWidth, cap = StrokeCap.Round)
+
+                // Bottom-Left Corner
+                drawLine(color = bracketColor, start = Offset(0f, size.height - cornerLength), end = Offset(0f, size.height), strokeWidth = strokeWidth, cap = StrokeCap.Round)
+                drawLine(color = bracketColor, start = Offset(0f, size.height), end = Offset(cornerLength, size.height), strokeWidth = strokeWidth, cap = StrokeCap.Round)
+
+                // Bottom-Right Corner
+                drawLine(color = bracketColor, start = Offset(size.width - cornerLength, size.height), end = Offset(size.width, size.height), strokeWidth = strokeWidth, cap = StrokeCap.Round)
+                drawLine(color = bracketColor, start = Offset(size.width, size.height - cornerLength), end = Offset(size.width, size.height), strokeWidth = strokeWidth, cap = StrokeCap.Round)
+            }
+
+            // Center Guide
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
             ) {
-                // Inner Target Frame
-                Box(
-                    modifier = Modifier
-                        .size(210.dp)
-                        .background(Color.Black.copy(alpha = 0.25f), CircleShape)
-                        .border(1.5.dp, NeonCyan.copy(alpha = 0.6f), CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
+                if (selectedEmployee?.photoUri != null) {
+                    Box(
+                        modifier = Modifier
+                            .size(72.dp)
+                            .clip(CircleShape)
+                            .border(2.dp, bracketColor, CircleShape)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Face,
-                            contentDescription = null,
-                            tint = if (selectedEmployee != null) NeonCyan else Color.White.copy(alpha = 0.7f),
-                            modifier = Modifier.size(72.dp)
+                        AsyncImage(
+                            model = selectedEmployee!!.photoUri,
+                            contentDescription = "Face",
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
                         )
-                        Spacer(modifier = Modifier.height(6.dp))
+                    }
+                } else {
+                    Icon(
+                        imageVector = Icons.Default.Face,
+                        contentDescription = null,
+                        tint = bracketColor.copy(alpha = 0.8f),
+                        modifier = Modifier.size(52.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = PureWhite.copy(alpha = 0.95f),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, CardBorderLight),
+                    shadowElevation = 2.dp
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                    ) {
+                        if (isLiveFaceDetected) {
+                            Box(modifier = Modifier.size(6.dp).background(AccentGreen, CircleShape))
+                        }
                         Text(
-                            text = if (selectedEmployee != null) "Wajah Terdeteksi" else "Posisikan Wajah",
-                            color = NeonCyan,
-                            fontSize = 12.sp,
+                            text = if (isLiveFaceDetected) "Wajah Terdeteksi" else if (selectedEmployee != null) "Wajah Siap" else "Arahkan Wajah",
+                            color = bracketColor,
+                            fontSize = 11.sp,
                             fontWeight = FontWeight.SemiBold
                         )
                     }
@@ -219,221 +293,178 @@ fun KioskScreen(
             }
         }
 
-        // 3. Top Header: Company Name, Live Clock & Admin Lock
+        // 3. 🏢 CLEAN EXECUTIVE WHITE TOP HEADER
         Column(
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .fillMaxWidth()
                 .statusBarsPadding()
-                .padding(horizontal = 16.dp, vertical = 12.dp)
+                .padding(horizontal = 14.dp, vertical = 8.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Company & Status Badge
+                // Left: Company Name & Address
                 Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = CardBg.copy(alpha = 0.85f),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, CardBorder)
+                    shape = RoundedCornerShape(12.dp),
+                    color = PureWhite.copy(alpha = 0.96f),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, CardBorderLight),
+                    shadowElevation = 2.dp,
+                    modifier = Modifier.weight(1f).padding(end = 8.dp)
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(10.dp)
-                                .background(NeonGreen, CircleShape)
+                                .size(8.dp)
+                                .background(if (isLiveFaceDetected) AccentGreen else PrimaryBlue, CircleShape)
                         )
                         Column {
                             Text(
                                 text = settings.companyName,
-                                color = TextPrimary,
+                                color = TextPrimaryLight,
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 14.sp
+                                fontSize = 13.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                             Text(
-                                text = "LIVE BIOMETRIC KIOSK",
-                                color = NeonCyan,
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                letterSpacing = 1.sp
+                                text = "${settings.address} • ${currentTimeStr.ifEmpty { "08:00:00" }}",
+                                color = TextSecondaryLight,
+                                fontSize = 10.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
                 }
 
-                // Top Actions: Camera Switch, PIN, Admin
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                // Right: Clean Functional Actions
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     // Switch Camera
                     IconButton(
                         onClick = { useFrontCamera = !useFrontCamera },
                         modifier = Modifier
-                            .size(40.dp)
-                            .background(CardBg.copy(alpha = 0.85f), CircleShape)
-                            .border(1.dp, CardBorder, CircleShape)
+                            .size(38.dp)
+                            .background(PureWhite, CircleShape)
+                            .border(1.dp, CardBorderLight, CircleShape)
+                            .shadow(1.dp, CircleShape)
                     ) {
-                        Icon(Icons.Default.FlipCameraAndroid, contentDescription = "Ganti Kamera", tint = NeonCyan, modifier = Modifier.size(20.dp))
+                        Icon(Icons.Default.FlipCameraAndroid, contentDescription = "Ganti Kamera", tint = PrimaryNavy, modifier = Modifier.size(18.dp))
                     }
 
-                    // Manual PIN Attendance
+                    // Absen Manual PIN
                     IconButton(
                         onClick = { showPinDialog = true },
                         modifier = Modifier
-                            .size(40.dp)
-                            .background(CardBg.copy(alpha = 0.85f), CircleShape)
-                            .border(1.dp, CardBorder, CircleShape)
+                            .size(38.dp)
+                            .background(PureWhite, CircleShape)
+                            .border(1.dp, CardBorderLight, CircleShape)
+                            .shadow(1.dp, CircleShape)
                     ) {
-                        Icon(Icons.Default.Pin, contentDescription = "Absen PIN", tint = NeonYellow, modifier = Modifier.size(20.dp))
+                        Icon(Icons.Default.Pin, contentDescription = "Absen PIN", tint = PrimaryNavy, modifier = Modifier.size(18.dp))
                     }
 
-                    // Admin Dashboard Lock
-                    IconButton(
+                    // Admin Access
+                    Button(
                         onClick = {
                             adminPinInput = ""
                             adminPinError = false
                             showAdminPinDialog = true
                         },
-                        modifier = Modifier
-                            .size(40.dp)
-                            .background(CardBg.copy(alpha = 0.85f), CircleShape)
-                            .border(1.dp, CardBorder, CircleShape)
+                        modifier = Modifier.height(38.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryNavy),
+                        contentPadding = PaddingValues(horizontal = 12.dp)
                     ) {
-                        Icon(Icons.Default.AdminPanelSettings, contentDescription = "Admin", tint = TextPrimary, modifier = Modifier.size(20.dp))
+                        Text("Admin", color = PureWhite, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Time & Date Pill
-            Surface(
-                modifier = Modifier.align(Alignment.CenterHorizontally),
-                shape = RoundedCornerShape(20.dp),
-                color = CardBg.copy(alpha = 0.75f),
-                border = androidx.compose.foundation.BorderStroke(1.dp, CardBorder)
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+            // Top Alert if no employees yet
+            if (employees.isEmpty()) {
+                Spacer(modifier = Modifier.height(6.dp))
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = InputBgLight,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, CardBorderLight),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Icon(Icons.Default.AccessTime, contentDescription = null, tint = NeonCyan, modifier = Modifier.size(16.dp))
-                    Text(
-                        text = "${currentTimeStr.ifEmpty { "08:00:00" }} • ${currentDateStr.ifEmpty { "Hari ini" }}",
-                        color = TextPrimary,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium
-                    )
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Belum ada data karyawan. Buka menu Admin di atas untuk mendaftarkan.",
+                            color = TextSecondaryLight,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
                 }
             }
         }
 
-        // 4. Bottom Interactive Overlay: EMPLOYEE BADGE + ABSEN MASUK & PULANG BUTTONS
-        Column(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .navigationBarsPadding()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.Bottom
-        ) {
-            if (employees.isEmpty()) {
-                // Empty state if no employee has been registered yet
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .border(1.5.dp, NeonYellow.copy(alpha = 0.6f), RoundedCornerShape(20.dp)),
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = CardBg.copy(alpha = 0.95f))
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(20.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Icon(Icons.Default.PersonAdd, contentDescription = null, tint = NeonYellow, modifier = Modifier.size(36.dp))
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "Belum Ada Karyawan Terdaftar",
-                            color = TextPrimary,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 16.sp
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "Silakan buka Admin Dashboard untuk menambahkan karyawan dan konfigurasi role & shift.",
-                            color = TextSecondary,
-                            fontSize = 12.sp,
-                            textAlign = TextAlign.Center
-                        )
-                        Spacer(modifier = Modifier.height(14.dp))
-                        Button(
-                            onClick = {
-                                adminPinInput = ""
-                                adminPinError = false
-                                showAdminPinDialog = true
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = NeonCyan),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Icon(Icons.Default.Settings, contentDescription = null, tint = DarkBg)
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Buka Admin Dashboard", color = DarkBg, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
-            } else {
-                val emp = selectedEmployee ?: employees.first()
-                val shiftResolution = repository.resolveShiftForEmployee(emp, settings)
+        // 4. 🪪 REFINED WHITE COMPACT BADGE CARD
+        if (employees.isNotEmpty()) {
+            val emp = selectedEmployee ?: employees.first()
+            val shiftResolution = repository.resolveShiftForEmployee(emp, settings)
 
-                // Quick Switcher Row (If multiple employees exist, lets them tap easily or switch)
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.Bottom
+            ) {
+                // Quick Employee Switcher (Compact Minimalist)
                 if (employees.size > 1) {
                     LazyRow(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(bottom = 10.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            .padding(bottom = 6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         items(employees, key = { it.id }) { item ->
                             val isSelected = item.id == emp.id
                             Surface(
-                                shape = RoundedCornerShape(12.dp),
-                                color = if (isSelected) NeonCyan.copy(alpha = 0.25f) else CardBg.copy(alpha = 0.85f),
+                                shape = RoundedCornerShape(8.dp),
+                                color = if (isSelected) PrimaryNavy else PureWhite,
                                 border = androidx.compose.foundation.BorderStroke(
-                                    width = if (isSelected) 1.5.dp else 1.dp,
-                                    color = if (isSelected) NeonCyan else CardBorder
+                                    width = 1.dp,
+                                    color = if (isSelected) PrimaryNavy else CardBorderLight
                                 ),
+                                shadowElevation = if (isSelected) 2.dp else 0.dp,
                                 modifier = Modifier.clickable {
                                     selectedEmployee = item
                                 }
                             ) {
                                 Row(
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(20.dp)
-                                            .background(if (isSelected) NeonCyan else TextMuted, CircleShape),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text(
-                                            text = item.name.take(1).uppercase(),
-                                            color = DarkBg,
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.Bold
+                                    if (item.photoUri != null) {
+                                        AsyncImage(
+                                            model = item.photoUri,
+                                            contentDescription = null,
+                                            modifier = Modifier
+                                                .size(16.dp)
+                                                .clip(CircleShape),
+                                            contentScale = ContentScale.Crop
                                         )
                                     }
                                     Text(
                                         text = item.name,
-                                        color = if (isSelected) NeonCyan else TextPrimary,
-                                        fontSize = 12.sp,
+                                        color = if (isSelected) PureWhite else TextPrimaryLight,
+                                        fontSize = 11.sp,
                                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
                                     )
                                 }
@@ -442,138 +473,112 @@ fun KioskScreen(
                     }
                 }
 
-                // PRIMARY POPUP CARD: Nama, Jabatan/Role, Jam Kerja, Tombol Masuk & Pulang
+                // PURE WHITE CARD
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .border(2.dp, NeonCyan.copy(alpha = 0.8f), RoundedCornerShape(24.dp)),
-                    shape = RoundedCornerShape(24.dp),
-                    colors = CardDefaults.cardColors(containerColor = CardBg.copy(alpha = 0.95f))
+                        .shadow(6.dp, RoundedCornerShape(16.dp)),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = PureWhite),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, CardBorderLight)
                 ) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(18.dp)
+                            .padding(horizontal = 14.dp, vertical = 12.dp)
                     ) {
-                        // Top Identity Row: Avatar + Name + Role Badge + Shift Schedule
+                        // Top Identity Row
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Row(
-                                modifier = Modifier.weight(1f),
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
-                                // Avatar circle
+                                // Photo / Initials
                                 Box(
                                     modifier = Modifier
-                                        .size(52.dp)
-                                        .background(NeonCyan.copy(alpha = 0.2f), CircleShape)
-                                        .border(2.dp, NeonCyan, CircleShape),
+                                        .size(42.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(InputBgLight)
+                                        .border(1.dp, CardBorderLight, RoundedCornerShape(10.dp)),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    Text(
-                                        text = emp.name.take(2).uppercase(),
-                                        color = NeonCyan,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        fontSize = 20.sp
-                                    )
+                                    if (!emp.photoUri.isNullOrEmpty()) {
+                                        AsyncImage(
+                                            model = emp.photoUri,
+                                            contentDescription = emp.name,
+                                            modifier = Modifier.fillMaxSize(),
+                                            contentScale = ContentScale.Crop
+                                        )
+                                    } else {
+                                        Text(
+                                            text = emp.name.take(2).uppercase(),
+                                            color = PrimaryNavy,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 15.sp
+                                        )
+                                    }
                                 }
 
                                 Column {
-                                    // 👤 Employee Name
-                                    Text(
-                                        text = emp.name,
-                                        style = MaterialTheme.typography.titleLarge,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = TextPrimary
-                                    )
-
-                                    Spacer(modifier = Modifier.height(4.dp))
-
-                                    // 💼 Badges: Role & Department & NIK
                                     Row(
                                         verticalAlignment = Alignment.CenterVertically,
                                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                                     ) {
+                                        Text(
+                                            text = emp.name,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 15.sp,
+                                            color = TextPrimaryLight
+                                        )
+
                                         Surface(
-                                            color = NeonPurple.copy(alpha = 0.25f),
-                                            shape = RoundedCornerShape(6.dp),
-                                            border = androidx.compose.foundation.BorderStroke(1.dp, NeonPurple.copy(alpha = 0.5f))
+                                            color = InputBgLight,
+                                            shape = RoundedCornerShape(4.dp),
+                                            border = androidx.compose.foundation.BorderStroke(1.dp, CardBorderLight)
                                         ) {
                                             Text(
                                                 text = emp.role.uppercase(),
-                                                color = NeonPurple,
-                                                fontWeight = FontWeight.ExtraBold,
-                                                fontSize = 11.sp,
-                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                color = PrimaryNavy,
+                                                fontWeight = FontWeight.SemiBold,
+                                                fontSize = 9.sp,
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.5.dp)
                                             )
                                         }
+                                    }
 
-                                        Text(text = "•", color = TextMuted)
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
                                         Text(
-                                            text = emp.division,
-                                            color = TextSecondary,
-                                            fontSize = 12.sp,
-                                            fontWeight = FontWeight.Medium
-                                        )
-                                        Text(text = "•", color = TextMuted)
-                                        Text(
-                                            text = "NIK: ${emp.nik}",
-                                            color = TextMuted,
+                                            text = "NIK: ${emp.nik} • ${emp.division}",
+                                            color = TextSecondaryLight,
                                             fontSize = 11.sp
+                                        )
+                                        Text(text = "•", color = TextMutedLight)
+                                        Text(
+                                            text = "${shiftResolution.shiftName} (${shiftResolution.startTime}-${shiftResolution.endTime})",
+                                            color = PrimaryBlue,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Medium
                                         )
                                     }
                                 }
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
 
-                        // ⏰ Work Shift / Schedule Info Badge
-                        Surface(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(10.dp),
-                            color = InputBg.copy(alpha = 0.8f),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, CardBorder)
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    Icon(Icons.Default.Schedule, contentDescription = null, tint = NeonCyan, modifier = Modifier.size(16.dp))
-                                    Text(
-                                        text = "Jadwal Kerja:",
-                                        color = TextSecondary,
-                                        fontSize = 12.sp
-                                    )
-                                }
-                                Text(
-                                    text = "${shiftResolution.shiftName} (${shiftResolution.startTime} - ${shiftResolution.endTime})",
-                                    color = NeonCyan,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 12.sp
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        // 🚀 TOMBOL ABSEN MASUK & ABSEN PULANG
+                        // Compact Action Buttons
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            // TOMBOL ABSEN MASUK
+                            // ABSEN MASUK
                             Button(
                                 onClick = {
                                     if (!isProcessingAttendance) {
@@ -582,7 +587,7 @@ fun KioskScreen(
                                             val record = repository.processAttendance(
                                                 employee = emp,
                                                 checkType = CheckType.CHECK_IN,
-                                                confidenceScore = 0.98f
+                                                confidenceScore = if (isLiveFaceDetected) 0.99f else 0.95f
                                             )
                                             val statusText = if (record.status == AttendanceStatus.ON_TIME) "Tepat Waktu" else "Terlambat"
                                             audioHelper.speak("Terima kasih ${emp.name}, berhasil Absen Masuk $statusText!")
@@ -593,25 +598,14 @@ fun KioskScreen(
                                 },
                                 modifier = Modifier
                                     .weight(1f)
-                                    .height(56.dp),
-                                shape = RoundedCornerShape(16.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = NeonCyan)
+                                    .height(44.dp),
+                                shape = RoundedCornerShape(10.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = PrimaryNavy)
                             ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    Icon(Icons.Default.Login, contentDescription = null, tint = DarkBg, modifier = Modifier.size(24.dp))
-                                    Text(
-                                        text = "ABSEN MASUK",
-                                        color = DarkBg,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        fontSize = 15.sp
-                                    )
-                                }
+                                Text("ABSEN MASUK", color = PureWhite, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                             }
 
-                            // TOMBOL ABSEN PULANG
+                            // ABSEN PULANG
                             Button(
                                 onClick = {
                                     if (!isProcessingAttendance) {
@@ -620,7 +614,7 @@ fun KioskScreen(
                                             val record = repository.processAttendance(
                                                 employee = emp,
                                                 checkType = CheckType.CHECK_OUT,
-                                                confidenceScore = 0.98f
+                                                confidenceScore = if (isLiveFaceDetected) 0.99f else 0.95f
                                             )
                                             val statusText = if (record.status == AttendanceStatus.OVERTIME) "Lembur" else "Berhasil"
                                             audioHelper.speak("Terima kasih ${emp.name}, berhasil Absen Pulang $statusText!")
@@ -631,22 +625,11 @@ fun KioskScreen(
                                 },
                                 modifier = Modifier
                                     .weight(1f)
-                                    .height(56.dp),
-                                shape = RoundedCornerShape(16.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = NeonGreen)
+                                    .height(44.dp),
+                                shape = RoundedCornerShape(10.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = AccentGreen)
                             ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    Icon(Icons.Default.Logout, contentDescription = null, tint = DarkBg, modifier = Modifier.size(24.dp))
-                                    Text(
-                                        text = "ABSEN PULANG",
-                                        color = DarkBg,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        fontSize = 15.sp
-                                    )
-                                }
+                                Text("ABSEN PULANG", color = PureWhite, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                             }
                         }
                     }
@@ -695,9 +678,10 @@ fun KioskScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(16.dp)
-                    .border(2.dp, NeonCyan, RoundedCornerShape(24.dp)),
-                shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = CardBg)
+                    .shadow(8.dp, RoundedCornerShape(20.dp)),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = PureWhite),
+                border = androidx.compose.foundation.BorderStroke(1.dp, CardBorderLight)
             ) {
                 Column(
                     modifier = Modifier
@@ -705,22 +689,21 @@ fun KioskScreen(
                         .padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Icon(Icons.Default.Security, contentDescription = null, tint = NeonCyan, modifier = Modifier.size(44.dp))
-                    Spacer(modifier = Modifier.height(12.dp))
                     Text(
-                        text = "Verifikasi Akses Admin",
+                        text = "Verifikasi Admin",
                         style = MaterialTheme.typography.titleLarge,
-                        color = TextPrimary,
+                        color = TextPrimaryLight,
                         fontWeight = FontWeight.Bold
                     )
+                    Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "Masukkan PIN Kiosk Admin untuk membuka Dashboard Pendaftaran & Pengaturan",
-                        color = TextSecondary,
+                        text = "Masukkan PIN Kiosk Admin untuk membuka Dashboard",
+                        color = TextSecondaryLight,
                         fontSize = 13.sp,
                         textAlign = TextAlign.Center
                     )
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(18.dp))
 
                     OutlinedTextField(
                         value = adminPinInput,
@@ -730,36 +713,38 @@ fun KioskScreen(
                                 adminPinError = false
                             }
                         },
-                        label = { Text("PIN Admin (Default: 8888)") },
+                        label = { Text("PIN Admin") },
                         visualTransformation = PasswordVisualTransformation(),
                         singleLine = true,
                         isError = adminPinError,
+                        shape = RoundedCornerShape(10.dp),
                         modifier = Modifier.fillMaxWidth(),
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = NeonCyan,
-                            unfocusedBorderColor = CardBorder,
-                            focusedTextColor = TextPrimary,
-                            unfocusedTextColor = TextPrimary
+                            focusedBorderColor = PrimaryNavy,
+                            unfocusedBorderColor = CardBorderLight,
+                            focusedTextColor = TextPrimaryLight,
+                            unfocusedTextColor = TextPrimaryLight
                         )
                     )
 
                     if (adminPinError) {
                         Spacer(modifier = Modifier.height(4.dp))
-                        Text(text = "PIN Admin salah!", color = NeonRed, fontSize = 12.sp)
+                        Text(text = "PIN Admin salah!", color = AccentRed, fontSize = 12.sp)
                     }
 
                     Spacer(modifier = Modifier.height(20.dp))
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         OutlinedButton(
                             onClick = { showAdminPinDialog = false },
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(12.dp)
+                            modifier = Modifier.weight(1f).height(44.dp),
+                            shape = RoundedCornerShape(10.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, CardBorderLight)
                         ) {
-                            Text("Batal", color = TextSecondary)
+                            Text("Batal", color = TextSecondaryLight)
                         }
 
                         Button(
@@ -771,11 +756,11 @@ fun KioskScreen(
                                     adminPinError = true
                                 }
                             },
-                            modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.buttonColors(containerColor = NeonCyan),
-                            shape = RoundedCornerShape(12.dp)
+                            modifier = Modifier.weight(1f).height(44.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = PrimaryNavy),
+                            shape = RoundedCornerShape(10.dp)
                         ) {
-                            Text("Masuk", color = DarkBg, fontWeight = FontWeight.Bold)
+                            Text("Masuk", color = PureWhite, fontWeight = FontWeight.Bold)
                         }
                     }
                 }

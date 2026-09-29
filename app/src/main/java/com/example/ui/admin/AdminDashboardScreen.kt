@@ -1,6 +1,14 @@
 package com.example.ui.admin
 
+import android.Manifest
+import android.annotation.SuppressLint
+import android.content.Context
+import android.content.pm.PackageManager
+import android.location.Location
+import android.location.LocationManager
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -18,10 +26,15 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
+import coil.compose.AsyncImage
 import com.example.data.model.*
 import com.example.data.repository.AttendanceRepository
 import com.example.ui.theme.*
@@ -45,7 +58,7 @@ fun AdminDashboardScreen(
     val kioskSettingsState by repository.kioskSettingsFlow.collectAsState(initial = null)
     val notifications by repository.allNotifications.collectAsState(initial = emptyList())
 
-    var selectedTab by remember { mutableIntStateOf(0) } // 0: Karyawan, 1: Log Absensi, 2: Pengaturan, 3: Notifikasi
+    var selectedTab by remember { mutableIntStateOf(0) } // 0: Karyawan, 1: Log Presensi, 2: Pengaturan, 3: Notifikasi
     var showRegisterDialog by remember { mutableStateOf(false) }
     var employeeToEdit by remember { mutableStateOf<Employee?>(null) }
     var employeeToDelete by remember { mutableStateOf<Employee?>(null) }
@@ -55,64 +68,58 @@ fun AdminDashboardScreen(
     val currentSettings = kioskSettingsState ?: KioskSettings()
 
     Scaffold(
-        containerColor = DarkBg,
+        containerColor = LightBg,
         topBar = {
             TopAppBar(
                 title = {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Surface(
-                            shape = CircleShape,
-                            color = NeonCyan.copy(alpha = 0.2f),
-                            modifier = Modifier.size(36.dp)
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(Icons.Default.AdminPanelSettings, contentDescription = null, tint = NeonCyan)
-                            }
-                        }
-                        Column {
-                            Text(
-                                text = "Admin Dashboard",
-                                style = MaterialTheme.typography.titleLarge,
-                                color = TextPrimary,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = currentSettings.companyName,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = TextSecondary
-                            )
-                        }
+                    Column {
+                        Text(
+                            text = "Admin Dashboard",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = TextPrimaryLight,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "${currentSettings.companyName} • ${currentSettings.address}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextSecondaryLight,
+                            maxLines = 1
+                        )
                     }
                 },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Kembali ke Kiosk", tint = NeonCyan)
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Kembali ke Kiosk", tint = PrimaryNavy)
                     }
                 },
                 actions = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.Fullscreen, contentDescription = "Mode Kiosk", tint = NeonCyan)
+                    TextButton(onClick = onNavigateBack) {
+                        Text("Buka Kiosk", color = PrimaryNavy, fontWeight = FontWeight.Bold)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = CardBg)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = PureWhite)
             )
         },
         floatingActionButton = {
             if (selectedTab == 0) {
-                ExtendedFloatingActionButton(
+                FloatingActionButton(
                     onClick = {
                         employeeToEdit = null
                         showRegisterDialog = true
                     },
-                    containerColor = NeonCyan,
-                    contentColor = DarkBg,
-                    shape = RoundedCornerShape(16.dp),
-                    icon = { Icon(Icons.Default.PersonAdd, contentDescription = null) },
-                    text = { Text("Tambah Karyawan", fontWeight = FontWeight.Bold) }
-                )
+                    containerColor = PrimaryNavy,
+                    contentColor = PureWhite,
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null, tint = PureWhite)
+                        Text("Tambah Karyawan", fontWeight = FontWeight.SemiBold, color = PureWhite)
+                    }
+                }
             }
         }
     ) { paddingValues ->
@@ -124,49 +131,29 @@ fun AdminDashboardScreen(
             // Navigation Tabs
             PrimaryTabRow(
                 selectedTabIndex = selectedTab,
-                containerColor = CardBg,
-                contentColor = NeonCyan,
-                divider = { HorizontalDivider(color = CardBorder) }
+                containerColor = PureWhite,
+                contentColor = PrimaryNavy,
+                divider = { HorizontalDivider(color = CardBorderLight) }
             ) {
                 Tab(
                     selected = selectedTab == 0,
                     onClick = { selectedTab = 0 },
-                    text = {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Icon(Icons.Default.People, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Text("Data Karyawan (${employees.size})", fontWeight = FontWeight.Bold)
-                        }
-                    }
+                    text = { Text("Karyawan (${employees.size})", fontWeight = FontWeight.SemiBold) }
                 )
                 Tab(
                     selected = selectedTab == 1,
                     onClick = { selectedTab = 1 },
-                    text = {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Icon(Icons.Default.History, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Text("Log Presensi (${attendanceRecords.size})", fontWeight = FontWeight.Bold)
-                        }
-                    }
+                    text = { Text("Log Presensi (${attendanceRecords.size})", fontWeight = FontWeight.SemiBold) }
                 )
                 Tab(
                     selected = selectedTab == 2,
                     onClick = { selectedTab = 2 },
-                    text = {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Icon(Icons.Default.Settings, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Text("Pengaturan Kiosk", fontWeight = FontWeight.Bold)
-                        }
-                    }
+                    text = { Text("Pengaturan", fontWeight = FontWeight.SemiBold) }
                 )
                 Tab(
                     selected = selectedTab == 3,
                     onClick = { selectedTab = 3 },
-                    text = {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Icon(Icons.Default.Notifications, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Text("Notifikasi (${notifications.size})", fontWeight = FontWeight.Bold)
-                        }
-                    }
+                    text = { Text("Notifikasi (${notifications.size})", fontWeight = FontWeight.SemiBold) }
                 )
             }
 
@@ -219,16 +206,15 @@ fun AdminDashboardScreen(
             employeeToEdit = employeeToEdit,
             kioskSettings = currentSettings,
             onDismiss = { showRegisterDialog = false },
-            onSaveEmployee = { emp ->
+            onSaveEmployee = { employee ->
                 coroutineScope.launch {
-                    if (employeeToEdit == null) {
-                        repository.insertEmployee(emp)
-                        snackbarMessage = "Karyawan ${emp.name} berhasil didaftarkan!"
+                    if (employee.id == 0L) {
+                        repository.insertEmployee(employee)
                     } else {
-                        repository.updateEmployee(emp)
-                        snackbarMessage = "Data karyawan ${emp.name} berhasil diperbarui!"
+                        repository.updateEmployee(employee)
                     }
                     showRegisterDialog = false
+                    snackbarMessage = if (employeeToEdit == null) "Karyawan baru berhasil ditambahkan!" else "Data karyawan diperbarui!"
                 }
             }
         )
@@ -238,33 +224,33 @@ fun AdminDashboardScreen(
     if (employeeToDelete != null) {
         AlertDialog(
             onDismissRequest = { employeeToDelete = null },
-            containerColor = CardBg,
-            title = { Text("Hapus Karyawan?", color = NeonRed, fontWeight = FontWeight.Bold) },
-            text = {
-                Text(
-                    "Apakah Anda yakin ingin menghapus ${employeeToDelete?.name} (${employeeToDelete?.nik})? Data ini tidak bisa dikembalikan.",
-                    color = TextPrimary
-                )
-            },
+            title = { Text("Hapus Karyawan", color = TextPrimaryLight, fontWeight = FontWeight.Bold) },
+            text = { Text("Apakah Anda yakin ingin menghapus data karyawan ${employeeToDelete!!.name}?", color = TextSecondaryLight) },
             confirmButton = {
                 Button(
                     onClick = {
                         coroutineScope.launch {
-                            employeeToDelete?.let { repository.deleteEmployee(it) }
+                            repository.deleteEmployee(employeeToDelete!!)
                             employeeToDelete = null
                             snackbarMessage = "Karyawan telah dihapus"
                         }
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = NeonRed)
+                    colors = ButtonDefaults.buttonColors(containerColor = AccentRed),
+                    shape = RoundedCornerShape(8.dp)
                 ) {
-                    Text("Hapus", color = Color.White, fontWeight = FontWeight.Bold)
+                    Text("Hapus", color = PureWhite)
                 }
             },
             dismissButton = {
-                OutlinedButton(onClick = { employeeToDelete = null }) {
-                    Text("Batal", color = TextSecondary)
+                OutlinedButton(
+                    onClick = { employeeToDelete = null },
+                    shape = RoundedCornerShape(8.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, CardBorderLight)
+                ) {
+                    Text("Batal", color = TextSecondaryLight)
                 }
-            }
+            },
+            containerColor = PureWhite
         )
     }
 }
@@ -277,44 +263,59 @@ fun EmployeesTab(
     onEditEmployee: (Employee) -> Unit,
     onDeleteEmployee: (Employee) -> Unit
 ) {
-    val filteredEmployees = remember(employees, searchQuery) {
-        if (searchQuery.isBlank()) employees
-        else employees.filter {
-            it.name.contains(searchQuery, ignoreCase = true) ||
-                    it.nik.contains(searchQuery, ignoreCase = true) ||
-                    it.role.contains(searchQuery, ignoreCase = true) ||
-                    it.division.contains(searchQuery, ignoreCase = true)
-        }
+    val filtered = employees.filter {
+        it.name.contains(searchQuery, ignoreCase = true) ||
+        it.nik.contains(searchQuery, ignoreCase = true) ||
+        it.role.contains(searchQuery, ignoreCase = true) ||
+        it.division.contains(searchQuery, ignoreCase = true)
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
         OutlinedTextField(
             value = searchQuery,
             onValueChange = onSearchChange,
-            placeholder = { Text("Cari nama, NIK, role (Manager/Staff), divisi...") },
-            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = NeonCyan) },
-            singleLine = true,
+            placeholder = { Text("Cari nama, NIK, role, atau divisi...") },
+            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = TextSecondaryLight) },
+            trailingIcon = {
+                if (searchQuery.isNotEmpty()) {
+                    IconButton(onClick = { onSearchChange("") }) {
+                        Icon(Icons.Default.Close, contentDescription = "Clear", tint = TextMutedLight)
+                    }
+                }
+            },
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp),
+            singleLine = true,
+            shape = RoundedCornerShape(10.dp),
             colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = NeonCyan,
-                unfocusedBorderColor = CardBorder,
-                focusedTextColor = TextPrimary,
-                unfocusedTextColor = TextPrimary
+                focusedBorderColor = PrimaryNavy,
+                unfocusedBorderColor = CardBorderLight,
+                focusedTextColor = TextPrimaryLight,
+                unfocusedTextColor = TextPrimaryLight
             )
         )
 
         Spacer(modifier = Modifier.height(14.dp))
 
-        if (filteredEmployees.isEmpty()) {
+        if (filtered.isEmpty()) {
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(Icons.Default.PeopleOutline, contentDescription = null, tint = TextMuted, modifier = Modifier.size(64.dp))
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text("Belum ada data karyawan ditemukan", color = TextSecondary)
+                    Text(
+                        text = if (employees.isEmpty()) "Belum ada data karyawan" else "Tidak ada karyawan yang cocok",
+                        color = TextSecondaryLight,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                    if (employees.isEmpty()) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Tekan tombol Tambah Karyawan di bawah untuk mendaftarkan.",
+                            color = TextMutedLight,
+                            fontSize = 12.sp
+                        )
+                    }
                 }
             }
         } else {
@@ -322,18 +323,19 @@ fun EmployeesTab(
                 modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                items(filteredEmployees, key = { it.id }) { emp ->
+                items(filtered, key = { it.id }) { emp ->
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .border(1.dp, CardBorder, RoundedCornerShape(16.dp)),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(containerColor = CardBg)
+                            .shadow(2.dp, RoundedCornerShape(12.dp)),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = PureWhite),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, CardBorderLight)
                     ) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(16.dp),
+                                .padding(14.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
@@ -342,87 +344,87 @@ fun EmployeesTab(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
+                                // Photo / Avatar
                                 Box(
                                     modifier = Modifier
-                                        .size(48.dp)
-                                        .background(NeonCyan.copy(alpha = 0.15f), CircleShape)
-                                        .border(1.dp, NeonCyan, CircleShape),
+                                        .size(44.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(InputBgLight)
+                                        .border(1.dp, CardBorderLight, RoundedCornerShape(10.dp)),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    Text(
-                                        text = emp.name.take(2).uppercase(),
-                                        color = NeonCyan,
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 18.sp
-                                    )
-                                }
-
-                                Column {
-                                    Text(
-                                        text = emp.name,
-                                        style = MaterialTheme.typography.titleMedium,
-                                        color = TextPrimary,
-                                        fontWeight = FontWeight.Bold
-                                    )
-
-                                    Spacer(modifier = Modifier.height(2.dp))
-
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                    ) {
-                                        // Role Badge
-                                        Surface(
-                                            color = NeonPurple.copy(alpha = 0.2f),
-                                            shape = RoundedCornerShape(6.dp)
-                                        ) {
-                                            Text(
-                                                text = emp.role,
-                                                color = NeonPurple,
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = 11.sp,
-                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                            )
-                                        }
-
-                                        Text(text = "•", color = TextMuted)
-                                        Text(text = emp.division, color = TextSecondary, fontSize = 12.sp)
-                                        Text(text = "•", color = TextMuted)
-                                        Text(text = "NIK: ${emp.nik}", color = TextMuted, fontSize = 12.sp)
-                                    }
-
-                                    Spacer(modifier = Modifier.height(4.dp))
-
-                                    // Work Shift Badge
-                                    val (shiftBadgeText, shiftBadgeColor) = when (emp.shiftType) {
-                                        ShiftAssignmentType.SHIFT_1.name -> Pair("☀️ Shift 1 Tetap (Pagi)", NeonCyan)
-                                        ShiftAssignmentType.SHIFT_2.name -> Pair("⛅ Shift 2 Tetap (Siang)", NeonYellow)
-                                        ShiftAssignmentType.SHIFT_3.name -> Pair("🌙 Shift 3 Tetap (Malam)", NeonPurple)
-                                        ShiftAssignmentType.MANUAL_CUSTOM.name -> Pair("✍️ Khusus: ${emp.customStartTime} - ${emp.customEndTime}", NeonGreen)
-                                        else -> Pair("🔄 Shift Kantor (Auto-Detect)", NeonCyan)
-                                    }
-
-                                    Surface(
-                                        color = shiftBadgeColor.copy(alpha = 0.12f),
-                                        shape = RoundedCornerShape(4.dp)
-                                    ) {
+                                    if (!emp.photoUri.isNullOrEmpty()) {
+                                        AsyncImage(
+                                            model = emp.photoUri,
+                                            contentDescription = emp.name,
+                                            modifier = Modifier.fillMaxSize(),
+                                            contentScale = ContentScale.Crop
+                                        )
+                                    } else {
                                         Text(
-                                            text = shiftBadgeText,
-                                            color = shiftBadgeColor,
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.Medium,
-                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                            text = emp.name.take(2).uppercase(),
+                                            color = PrimaryNavy,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 15.sp
                                         )
                                     }
                                 }
+
+                                Column {
+                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        Text(
+                                            text = emp.name,
+                                            fontWeight = FontWeight.Bold,
+                                            color = TextPrimaryLight,
+                                            fontSize = 15.sp
+                                        )
+                                        Surface(
+                                            color = InputBgLight,
+                                            shape = RoundedCornerShape(4.dp),
+                                            border = androidx.compose.foundation.BorderStroke(1.dp, CardBorderLight)
+                                        ) {
+                                            Text(
+                                                text = emp.role.uppercase(),
+                                                color = PrimaryNavy,
+                                                fontSize = 9.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.5.dp)
+                                            )
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = "NIK: ${emp.nik} • ${emp.division}",
+                                        color = TextSecondaryLight,
+                                        fontSize = 12.sp
+                                    )
+
+                                    Spacer(modifier = Modifier.height(3.dp))
+
+                                    val shiftBadgeText = when (emp.shiftType) {
+                                        ShiftAssignmentType.SHIFT_1.name -> "Shift 1 (Pagi)"
+                                        ShiftAssignmentType.SHIFT_2.name -> "Shift 2 (Siang)"
+                                        ShiftAssignmentType.SHIFT_3.name -> "Shift 3 (Malam)"
+                                        ShiftAssignmentType.MANUAL_CUSTOM.name -> "Khusus (${emp.customStartTime} - ${emp.customEndTime})"
+                                        else -> "Shift Kantor (Auto-Detect)"
+                                    }
+
+                                    Text(
+                                        text = shiftBadgeText,
+                                        color = PrimaryBlue,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
                             }
 
-                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                                 IconButton(onClick = { onEditEmployee(emp) }) {
-                                    Icon(Icons.Default.Edit, contentDescription = "Edit", tint = NeonCyan)
+                                    Icon(Icons.Default.Edit, contentDescription = "Edit", tint = PrimaryNavy, modifier = Modifier.size(18.dp))
                                 }
                                 IconButton(onClick = { onDeleteEmployee(emp) }) {
-                                    Icon(Icons.Default.Delete, contentDescription = "Hapus", tint = NeonRed)
+                                    Icon(Icons.Default.Delete, contentDescription = "Hapus", tint = AccentRed, modifier = Modifier.size(18.dp))
                                 }
                             }
                         }
@@ -446,9 +448,7 @@ fun AttendanceLogsTab(
             contentAlignment = Alignment.Center
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(Icons.Default.EventBusy, contentDescription = null, tint = TextMuted, modifier = Modifier.size(64.dp))
-                Spacer(modifier = Modifier.height(8.dp))
-                Text("Belum ada riwayat presensi tersimpan", color = TextSecondary)
+                Text("Belum ada riwayat presensi tersimpan", color = TextSecondaryLight, fontSize = 14.sp)
             }
         }
     } else {
@@ -458,47 +458,49 @@ fun AttendanceLogsTab(
         ) {
             items(records, key = { it.id }) { record ->
                 val (statusText, statusBg, statusColor) = when (record.status) {
-                    AttendanceStatus.ON_TIME -> Triple("Tepat Waktu", NeonGreen.copy(alpha = 0.15f), NeonGreen)
-                    AttendanceStatus.LATE -> Triple("Terlambat", NeonRed.copy(alpha = 0.15f), NeonRed)
-                    AttendanceStatus.EARLY_DEPARTURE -> Triple("Pulang Awal", NeonYellow.copy(alpha = 0.15f), NeonYellow)
-                    AttendanceStatus.OVERTIME -> Triple("Lembur", NeonPurple.copy(alpha = 0.15f), NeonPurple)
+                    AttendanceStatus.ON_TIME -> Triple("Tepat Waktu", AccentGreen.copy(alpha = 0.10f), AccentGreen)
+                    AttendanceStatus.LATE -> Triple("Terlambat", AccentRed.copy(alpha = 0.10f), AccentRed)
+                    AttendanceStatus.EARLY_DEPARTURE -> Triple("Pulang Awal", AccentAmber.copy(alpha = 0.10f), AccentAmber)
+                    AttendanceStatus.OVERTIME -> Triple("Lembur", AccentPurple.copy(alpha = 0.10f), AccentPurple)
                 }
 
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .border(1.dp, CardBorder, RoundedCornerShape(16.dp)),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = CardBg)
+                        .shadow(2.dp, RoundedCornerShape(12.dp)),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = PureWhite),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, CardBorderLight)
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(16.dp),
+                            .padding(14.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 Text(
                                     text = record.employeeName,
                                     fontWeight = FontWeight.Bold,
-                                    color = TextPrimary,
-                                    fontSize = 16.sp
+                                    color = TextPrimaryLight,
+                                    fontSize = 15.sp
                                 )
                                 Surface(
-                                    color = NeonPurple.copy(alpha = 0.2f),
-                                    shape = RoundedCornerShape(4.dp)
+                                    color = InputBgLight,
+                                    shape = RoundedCornerShape(4.dp),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, CardBorderLight)
                                 ) {
                                     Text(
                                         text = record.role,
-                                        color = NeonPurple,
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                        color = PrimaryNavy,
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.5.dp)
                                     )
                                 }
                             }
@@ -506,8 +508,8 @@ fun AttendanceLogsTab(
                             Spacer(modifier = Modifier.height(2.dp))
 
                             Text(
-                                text = "NIK: ${record.nik}  •  ${record.shiftName}",
-                                color = TextSecondary,
+                                text = "NIK: ${record.nik} • ${record.shiftName}",
+                                color = TextSecondaryLight,
                                 fontSize = 12.sp
                             )
 
@@ -515,17 +517,17 @@ fun AttendanceLogsTab(
 
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 Surface(
-                                    color = if (record.checkType == CheckType.CHECK_IN) NeonCyan.copy(alpha = 0.15f) else NeonGreen.copy(alpha = 0.15f),
+                                    color = if (record.checkType == CheckType.CHECK_IN) PrimaryNavy else AccentGreen,
                                     shape = RoundedCornerShape(4.dp)
                                 ) {
                                     Text(
-                                        text = if (record.checkType == CheckType.CHECK_IN) "ABSEN MASUK" else "ABSEN PULANG",
-                                        color = if (record.checkType == CheckType.CHECK_IN) NeonCyan else NeonGreen,
+                                        text = if (record.checkType == CheckType.CHECK_IN) "MASUK" else "PULANG",
+                                        color = PureWhite,
                                         fontWeight = FontWeight.Bold,
-                                        fontSize = 11.sp,
+                                        fontSize = 10.sp,
                                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                     )
                                 }
@@ -537,8 +539,8 @@ fun AttendanceLogsTab(
                                     Text(
                                         text = statusText,
                                         color = statusColor,
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        fontSize = 10.sp,
                                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                     )
                                 }
@@ -547,13 +549,13 @@ fun AttendanceLogsTab(
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
                                 text = dateFormat.format(Date(record.timestamp)),
-                                color = TextMuted,
+                                color = TextMutedLight,
                                 fontSize = 11.sp
                             )
                         }
 
                         IconButton(onClick = { onDeleteRecord(record.id) }) {
-                            Icon(Icons.Default.Delete, contentDescription = "Hapus Log", tint = TextMuted)
+                            Icon(Icons.Default.Delete, contentDescription = "Hapus Log", tint = TextMutedLight, modifier = Modifier.size(18.dp))
                         }
                     }
                 }
@@ -562,13 +564,18 @@ fun AttendanceLogsTab(
     }
 }
 
+@SuppressLint("MissingPermission")
 @Composable
 fun KioskSettingsTab(
     settings: KioskSettings,
     onSaveSettings: (KioskSettings) -> Unit
 ) {
+    val context = LocalContext.current
     var companyName by remember { mutableStateOf(settings.companyName) }
     var address by remember { mutableStateOf(settings.address) }
+    var latitude by remember { mutableDoubleStateOf(settings.latitude) }
+    var longitude by remember { mutableDoubleStateOf(settings.longitude) }
+    var radiusMeters by remember { mutableDoubleStateOf(settings.radiusMeters) }
     var kioskPin by remember { mutableStateOf(settings.kioskPin) }
     var confidenceThreshold by remember { mutableFloatStateOf(settings.faceConfidenceThreshold) }
 
@@ -584,6 +591,32 @@ fun KioskSettingsTab(
     var fonnteApiKey by remember { mutableStateOf(settings.fonnteApiKey) }
     var fonnteAdminWa by remember { mutableStateOf(settings.fonnteAdminWa) }
     var googleSheetsUrl by remember { mutableStateOf(settings.googleSheetsUrl) }
+    var gpsStatusMessage by remember { mutableStateOf<String?>(null) }
+
+    val locationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val granted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+                permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        if (granted) {
+            try {
+                val lm = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+                val loc: Location? = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+                    ?: lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
+                if (loc != null) {
+                    latitude = loc.latitude
+                    longitude = loc.longitude
+                    gpsStatusMessage = "Lokasi GPS berhasil diperbarui."
+                } else {
+                    gpsStatusMessage = "GPS aktif. Pastikan sinyal lokasi tersedia."
+                }
+            } catch (e: Exception) {
+                gpsStatusMessage = "Gagal membaca GPS: ${e.message}"
+            }
+        } else {
+            gpsStatusMessage = "Izin lokasi tidak diberikan."
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -591,30 +624,108 @@ fun KioskSettingsTab(
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Master Shift Setting Card
+        // 1. Identitas & Lokasi Kantor
         Card(
-            modifier = Modifier.fillMaxWidth().border(1.dp, NeonCyan.copy(alpha = 0.4f), RoundedCornerShape(16.dp)),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = CardBg)
+            modifier = Modifier.fillMaxWidth().shadow(2.dp, RoundedCornerShape(12.dp)),
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(containerColor = PureWhite),
+            border = androidx.compose.foundation.BorderStroke(1.dp, CardBorderLight)
         ) {
             Column(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Icon(Icons.Default.AccessTime, contentDescription = null, tint = NeonCyan)
-                    Text("Master Konfigurasi Shift Kantor (3 Shift)", color = NeonCyan, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                }
+                Text("Identitas & Lokasi Kantor", color = TextPrimaryLight, fontWeight = FontWeight.Bold, fontSize = 15.sp)
 
-                Text("Jadwal ini digunakan otomatis oleh sistem untuk karyawan yang disetel mode 'Auto-Detect'.", color = TextSecondary, fontSize = 12.sp)
+                OutlinedTextField(
+                    value = companyName,
+                    onValueChange = { companyName = it },
+                    label = { Text("Nama Perusahaan / Instansi") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    shape = RoundedCornerShape(8.dp),
+                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = PrimaryNavy, unfocusedBorderColor = CardBorderLight, focusedTextColor = TextPrimaryLight, unfocusedTextColor = TextPrimaryLight)
+                )
+
+                OutlinedTextField(
+                    value = address,
+                    onValueChange = { address = it },
+                    label = { Text("Alamat / Lokasi Kantor") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    shape = RoundedCornerShape(8.dp),
+                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = PrimaryNavy, unfocusedBorderColor = CardBorderLight, focusedTextColor = TextPrimaryLight, unfocusedTextColor = TextPrimaryLight)
+                )
+
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = InputBgLight,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, CardBorderLight)
+                ) {
+                    Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text("Koordinat GPS Kantor", color = TextPrimaryLight, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                                Text("Lat: ${String.format("%.4f", latitude)}, Long: ${String.format("%.4f", longitude)}", color = TextSecondaryLight, fontSize = 11.sp)
+                            }
+
+                            Button(
+                                onClick = {
+                                    val fine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                                    if (fine) {
+                                        try {
+                                            val lm = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+                                            val loc: Location? = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+                                                ?: lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
+                                            if (loc != null) {
+                                                latitude = loc.latitude
+                                                longitude = loc.longitude
+                                                gpsStatusMessage = "Lokasi GPS kantor diperbarui."
+                                            }
+                                        } catch (_: Exception) {}
+                                    } else {
+                                        locationPermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+                                    }
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = PrimaryNavy),
+                                shape = RoundedCornerShape(6.dp),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                            ) {
+                                Text("Ambil GPS", color = PureWhite, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                            }
+                        }
+
+                        if (gpsStatusMessage != null) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(text = gpsStatusMessage!!, color = AccentGreen, fontSize = 11.sp)
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2. Master Shift
+        Card(
+            modifier = Modifier.fillMaxWidth().shadow(2.dp, RoundedCornerShape(12.dp)),
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(containerColor = PureWhite),
+            border = androidx.compose.foundation.BorderStroke(1.dp, CardBorderLight)
+        ) {
+            Column(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("Master Konfigurasi Shift Kantor", color = TextPrimaryLight, fontWeight = FontWeight.Bold, fontSize = 15.sp)
 
                 // Shift 1
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("Shift 1 (Pagi):", color = TextPrimary, fontWeight = FontWeight.Bold, modifier = Modifier.width(110.dp), fontSize = 13.sp)
+                    Text("Shift 1:", color = TextPrimaryLight, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(70.dp), fontSize = 13.sp)
                     OutlinedTextField(
                         value = shift1Start,
                         onValueChange = { shift1Start = it },
                         label = { Text("Mulai") },
                         modifier = Modifier.weight(1f),
                         singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = NeonCyan, unfocusedBorderColor = CardBorder, focusedTextColor = TextPrimary, unfocusedTextColor = TextPrimary)
+                        shape = RoundedCornerShape(8.dp),
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = PrimaryNavy, unfocusedBorderColor = CardBorderLight, focusedTextColor = TextPrimaryLight, unfocusedTextColor = TextPrimaryLight)
                     )
                     OutlinedTextField(
                         value = shift1End,
@@ -622,20 +733,22 @@ fun KioskSettingsTab(
                         label = { Text("Selesai") },
                         modifier = Modifier.weight(1f),
                         singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = NeonCyan, unfocusedBorderColor = CardBorder, focusedTextColor = TextPrimary, unfocusedTextColor = TextPrimary)
+                        shape = RoundedCornerShape(8.dp),
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = PrimaryNavy, unfocusedBorderColor = CardBorderLight, focusedTextColor = TextPrimaryLight, unfocusedTextColor = TextPrimaryLight)
                     )
                 }
 
                 // Shift 2
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("Shift 2 (Siang):", color = TextPrimary, fontWeight = FontWeight.Bold, modifier = Modifier.width(110.dp), fontSize = 13.sp)
+                    Text("Shift 2:", color = TextPrimaryLight, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(70.dp), fontSize = 13.sp)
                     OutlinedTextField(
                         value = shift2Start,
                         onValueChange = { shift2Start = it },
                         label = { Text("Mulai") },
                         modifier = Modifier.weight(1f),
                         singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = NeonCyan, unfocusedBorderColor = CardBorder, focusedTextColor = TextPrimary, unfocusedTextColor = TextPrimary)
+                        shape = RoundedCornerShape(8.dp),
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = PrimaryNavy, unfocusedBorderColor = CardBorderLight, focusedTextColor = TextPrimaryLight, unfocusedTextColor = TextPrimaryLight)
                     )
                     OutlinedTextField(
                         value = shift2End,
@@ -643,20 +756,22 @@ fun KioskSettingsTab(
                         label = { Text("Selesai") },
                         modifier = Modifier.weight(1f),
                         singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = NeonCyan, unfocusedBorderColor = CardBorder, focusedTextColor = TextPrimary, unfocusedTextColor = TextPrimary)
+                        shape = RoundedCornerShape(8.dp),
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = PrimaryNavy, unfocusedBorderColor = CardBorderLight, focusedTextColor = TextPrimaryLight, unfocusedTextColor = TextPrimaryLight)
                     )
                 }
 
                 // Shift 3
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("Shift 3 (Malam):", color = TextPrimary, fontWeight = FontWeight.Bold, modifier = Modifier.width(110.dp), fontSize = 13.sp)
+                    Text("Shift 3:", color = TextPrimaryLight, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(70.dp), fontSize = 13.sp)
                     OutlinedTextField(
                         value = shift3Start,
                         onValueChange = { shift3Start = it },
                         label = { Text("Mulai") },
                         modifier = Modifier.weight(1f),
                         singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = NeonCyan, unfocusedBorderColor = CardBorder, focusedTextColor = TextPrimary, unfocusedTextColor = TextPrimary)
+                        shape = RoundedCornerShape(8.dp),
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = PrimaryNavy, unfocusedBorderColor = CardBorderLight, focusedTextColor = TextPrimaryLight, unfocusedTextColor = TextPrimaryLight)
                     )
                     OutlinedTextField(
                         value = shift3End,
@@ -664,102 +779,74 @@ fun KioskSettingsTab(
                         label = { Text("Selesai") },
                         modifier = Modifier.weight(1f),
                         singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = NeonCyan, unfocusedBorderColor = CardBorder, focusedTextColor = TextPrimary, unfocusedTextColor = TextPrimary)
+                        shape = RoundedCornerShape(8.dp),
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = PrimaryNavy, unfocusedBorderColor = CardBorderLight, focusedTextColor = TextPrimaryLight, unfocusedTextColor = TextPrimaryLight)
                     )
                 }
             }
         }
 
-        // WhatsApp & Sheets Cloud Sync
+        // 3. Integrasi WhatsApp & Google Sheets
         Card(
-            modifier = Modifier.fillMaxWidth().border(1.dp, CardBorder, RoundedCornerShape(16.dp)),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = CardBg)
+            modifier = Modifier.fillMaxWidth().shadow(2.dp, RoundedCornerShape(12.dp)),
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(containerColor = PureWhite),
+            border = androidx.compose.foundation.BorderStroke(1.dp, CardBorderLight)
         ) {
             Column(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Icon(Icons.Default.CloudSync, contentDescription = null, tint = NeonGreen)
-                    Text("Integrasi Notifikasi WhatsApp & Google Sheets", color = NeonGreen, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                }
+                Text("Integrasi WhatsApp & Google Sheets", color = TextPrimaryLight, fontWeight = FontWeight.Bold, fontSize = 15.sp)
 
                 OutlinedTextField(
                     value = fonnteApiKey,
                     onValueChange = { fonnteApiKey = it },
-                    label = { Text("Token API Fonnte (WhatsApp)") },
+                    label = { Text("API Token Fonnte (WhatsApp)") },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = NeonGreen, unfocusedBorderColor = CardBorder, focusedTextColor = TextPrimary, unfocusedTextColor = TextPrimary)
+                    shape = RoundedCornerShape(8.dp),
+                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = PrimaryNavy, unfocusedBorderColor = CardBorderLight, focusedTextColor = TextPrimaryLight, unfocusedTextColor = TextPrimaryLight)
                 )
 
                 OutlinedTextField(
                     value = fonnteAdminWa,
                     onValueChange = { fonnteAdminWa = it },
-                    label = { Text("Nomor WhatsApp Admin HRD (cth: 081234567890)") },
+                    label = { Text("Nomor WhatsApp Admin HRD (cth: 08123456789)") },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = NeonGreen, unfocusedBorderColor = CardBorder, focusedTextColor = TextPrimary, unfocusedTextColor = TextPrimary)
+                    shape = RoundedCornerShape(8.dp),
+                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = PrimaryNavy, unfocusedBorderColor = CardBorderLight, focusedTextColor = TextPrimaryLight, unfocusedTextColor = TextPrimaryLight)
                 )
 
                 OutlinedTextField(
                     value = googleSheetsUrl,
                     onValueChange = { googleSheetsUrl = it },
-                    label = { Text("URL Google Sheets Web App Webhook") },
+                    label = { Text("URL Webhook Google Sheets") },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = NeonGreen, unfocusedBorderColor = CardBorder, focusedTextColor = TextPrimary, unfocusedTextColor = TextPrimary)
-                )
-
-                Surface(
-                    color = InputBg,
                     shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(
-                        text = "Status Sinkronisasi Terakhir: ${settings.lastSheetsSyncStatus}",
-                        color = TextSecondary,
-                        fontSize = 12.sp,
-                        modifier = Modifier.padding(10.dp)
-                    )
-                }
+                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = PrimaryNavy, unfocusedBorderColor = CardBorderLight, focusedTextColor = TextPrimaryLight, unfocusedTextColor = TextPrimaryLight)
+                )
             }
         }
 
-        // Kiosk Security
+        // 4. Keamanan PIN Admin
         Card(
-            modifier = Modifier.fillMaxWidth().border(1.dp, CardBorder, RoundedCornerShape(16.dp)),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = CardBg)
+            modifier = Modifier.fillMaxWidth().shadow(2.dp, RoundedCornerShape(12.dp)),
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(containerColor = PureWhite),
+            border = androidx.compose.foundation.BorderStroke(1.dp, CardBorderLight)
         ) {
             Column(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Icon(Icons.Default.Security, contentDescription = null, tint = NeonYellow)
-                    Text("Keamanan & Threshold Wajah", color = NeonYellow, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                }
+                Text("Keamanan Akses Kiosk", color = TextPrimaryLight, fontWeight = FontWeight.Bold, fontSize = 15.sp)
 
                 OutlinedTextField(
                     value = kioskPin,
                     onValueChange = { kioskPin = it },
-                    label = { Text("PIN Kiosk Admin (Untuk Akses Dashboard)") },
+                    label = { Text("PIN Akses Admin (Untuk Buka Dashboard)") },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = NeonYellow, unfocusedBorderColor = CardBorder, focusedTextColor = TextPrimary, unfocusedTextColor = TextPrimary)
+                    shape = RoundedCornerShape(8.dp),
+                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = PrimaryNavy, unfocusedBorderColor = CardBorderLight, focusedTextColor = TextPrimaryLight, unfocusedTextColor = TextPrimaryLight)
                 )
-
-                Column {
-                    Text(
-                        text = "Tingkat Kemiripan Wajah (Confidence Threshold): ${(confidenceThreshold * 100).toInt()}%",
-                        color = TextPrimary,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Slider(
-                        value = confidenceThreshold,
-                        onValueChange = { confidenceThreshold = it },
-                        valueRange = 0.50f..0.99f,
-                        colors = SliderDefaults.colors(thumbColor = NeonCyan, activeTrackColor = NeonCyan)
-                    )
-                    Text("Semakin tinggi threshold, semakin ketat kecocokan biometrik wajah karyawan.", color = TextMuted, fontSize = 11.sp)
-                }
             }
         }
 
@@ -768,6 +855,9 @@ fun KioskSettingsTab(
                 val updated = settings.copy(
                     companyName = companyName.trim(),
                     address = address.trim(),
+                    latitude = latitude,
+                    longitude = longitude,
+                    radiusMeters = radiusMeters,
                     kioskPin = kioskPin.trim(),
                     faceConfidenceThreshold = confidenceThreshold,
                     shift1Start = shift1Start.trim(),
@@ -782,13 +872,11 @@ fun KioskSettingsTab(
                 )
                 onSaveSettings(updated)
             },
-            modifier = Modifier.fillMaxWidth().height(50.dp),
-            shape = RoundedCornerShape(12.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = NeonCyan)
+            modifier = Modifier.fillMaxWidth().height(48.dp),
+            shape = RoundedCornerShape(10.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = PrimaryNavy)
         ) {
-            Icon(Icons.Default.Save, contentDescription = null, tint = DarkBg)
-            Spacer(modifier = Modifier.width(8.dp))
-            Text("Simpan Semua Pengaturan", color = DarkBg, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            Text("Simpan Pengaturan", color = PureWhite, fontWeight = FontWeight.Bold, fontSize = 15.sp)
         }
 
         Spacer(modifier = Modifier.height(24.dp))
@@ -805,9 +893,7 @@ fun NotificationsTab(notifications: List<AdminNotification>) {
             contentAlignment = Alignment.Center
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(Icons.Default.NotificationsNone, contentDescription = null, tint = TextMuted, modifier = Modifier.size(64.dp))
-                Spacer(modifier = Modifier.height(8.dp))
-                Text("Belum ada notifikasi sistem", color = TextSecondary)
+                Text("Belum ada notifikasi sistem", color = TextSecondaryLight, fontSize = 14.sp)
             }
         }
     } else {
@@ -817,21 +903,22 @@ fun NotificationsTab(notifications: List<AdminNotification>) {
         ) {
             items(notifications, key = { it.id }) { notif ->
                 Card(
-                    modifier = Modifier.fillMaxWidth().border(1.dp, CardBorder, RoundedCornerShape(16.dp)),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = CardBg)
+                    modifier = Modifier.fillMaxWidth().shadow(2.dp, RoundedCornerShape(12.dp)),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = PureWhite),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, CardBorderLight)
                 ) {
-                    Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+                    Column(modifier = Modifier.fillMaxWidth().padding(14.dp)) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(text = notif.title, fontWeight = FontWeight.Bold, color = if (notif.type == "ALERT") NeonRed else NeonGreen, fontSize = 15.sp)
-                            Text(text = dateFormat.format(Date(notif.timestamp)), color = TextMuted, fontSize = 11.sp)
+                            Text(text = notif.title, fontWeight = FontWeight.Bold, color = if (notif.type == "ALERT") AccentRed else AccentGreen, fontSize = 14.sp)
+                            Text(text = dateFormat.format(Date(notif.timestamp)), color = TextMutedLight, fontSize = 11.sp)
                         }
                         Spacer(modifier = Modifier.height(4.dp))
-                        Text(text = notif.message, color = TextPrimary, fontSize = 13.sp)
+                        Text(text = notif.message, color = TextPrimaryLight, fontSize = 13.sp)
                     }
                 }
             }

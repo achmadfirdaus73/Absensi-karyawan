@@ -11,6 +11,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -36,9 +37,10 @@ fun PinAttendanceDialog(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp)
-                .border(2.dp, NeonCyan, RoundedCornerShape(24.dp)),
-            shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(containerColor = CardBg)
+                .shadow(8.dp, RoundedCornerShape(20.dp)),
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = PureWhite),
+            border = androidx.compose.foundation.BorderStroke(1.dp, CardBorderLight)
         ) {
             Column(
                 modifier = Modifier
@@ -47,16 +49,16 @@ fun PinAttendanceDialog(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    text = "Presensi Manual (PIN)",
+                    text = "Presensi Cadangan PIN",
                     style = MaterialTheme.typography.titleLarge,
-                    color = NeonCyan,
+                    color = TextPrimaryLight,
                     fontWeight = FontWeight.Bold
                 )
 
                 Text(
                     text = "Gunakan jika kamera mengalami kendala",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = TextSecondary
+                    color = TextSecondaryLight
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -68,30 +70,32 @@ fun PinAttendanceDialog(
                 ) {
                     Button(
                         onClick = { selectedCheckType = CheckType.CHECK_IN },
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.weight(1f).height(42.dp),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = if (selectedCheckType == CheckType.CHECK_IN) NeonCyan else InputBg
+                            containerColor = if (selectedCheckType == CheckType.CHECK_IN) PrimaryNavy else InputBgLight
                         ),
-                        shape = RoundedCornerShape(12.dp)
+                        shape = RoundedCornerShape(8.dp)
                     ) {
                         Text(
                             text = "Absen Masuk",
-                            color = if (selectedCheckType == CheckType.CHECK_IN) DarkBg else TextSecondary,
-                            fontWeight = FontWeight.Bold
+                            color = if (selectedCheckType == CheckType.CHECK_IN) PureWhite else TextSecondaryLight,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 12.sp
                         )
                     }
                     Button(
                         onClick = { selectedCheckType = CheckType.CHECK_OUT },
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.weight(1f).height(42.dp),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = if (selectedCheckType == CheckType.CHECK_OUT) NeonGreen else InputBg
+                            containerColor = if (selectedCheckType == CheckType.CHECK_OUT) AccentGreen else InputBgLight
                         ),
-                        shape = RoundedCornerShape(12.dp)
+                        shape = RoundedCornerShape(8.dp)
                     ) {
                         Text(
                             text = "Absen Pulang",
-                            color = if (selectedCheckType == CheckType.CHECK_OUT) DarkBg else TextSecondary,
-                            fontWeight = FontWeight.Bold
+                            color = if (selectedCheckType == CheckType.CHECK_OUT) PureWhite else TextSecondaryLight,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 12.sp
                         )
                     }
                 }
@@ -102,14 +106,14 @@ fun PinAttendanceDialog(
                     value = nik,
                     onValueChange = { nik = it },
                     label = { Text("Nomor Induk Karyawan (NIK)") },
-                    leadingIcon = { Icon(Icons.Default.Person, contentDescription = null, tint = NeonCyan) },
                     singleLine = true,
+                    shape = RoundedCornerShape(8.dp),
                     modifier = Modifier.fillMaxWidth(),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = NeonCyan,
-                        unfocusedBorderColor = CardBorder,
-                        focusedTextColor = TextPrimary,
-                        unfocusedTextColor = TextPrimary
+                        focusedBorderColor = PrimaryNavy,
+                        unfocusedBorderColor = CardBorderLight,
+                        focusedTextColor = TextPrimaryLight,
+                        unfocusedTextColor = TextPrimaryLight
                     )
                 )
 
@@ -119,36 +123,37 @@ fun PinAttendanceDialog(
                     value = pin,
                     onValueChange = { if (it.length <= 6) pin = it },
                     label = { Text("PIN Karyawan") },
-                    leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null, tint = NeonCyan) },
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
                     singleLine = true,
+                    shape = RoundedCornerShape(8.dp),
                     modifier = Modifier.fillMaxWidth(),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = NeonCyan,
-                        unfocusedBorderColor = CardBorder,
-                        focusedTextColor = TextPrimary,
-                        unfocusedTextColor = TextPrimary
+                        focusedBorderColor = PrimaryNavy,
+                        unfocusedBorderColor = CardBorderLight,
+                        focusedTextColor = TextPrimaryLight,
+                        unfocusedTextColor = TextPrimaryLight
                     )
                 )
 
                 if (errorMessage != null) {
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text(text = errorMessage!!, color = NeonRed, fontSize = 12.sp)
+                    Text(text = errorMessage!!, color = AccentRed, fontSize = 12.sp)
                 }
 
                 Spacer(modifier = Modifier.height(20.dp))
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     OutlinedButton(
                         onClick = onDismiss,
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(12.dp)
+                        modifier = Modifier.weight(1f).height(44.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, CardBorderLight)
                     ) {
-                        Text("Batal", color = TextSecondary)
+                        Text("Batal", color = TextSecondaryLight)
                     }
                     Button(
                         onClick = {
@@ -158,11 +163,11 @@ fun PinAttendanceDialog(
                                 onSubmitPin(nik.trim(), pin.trim(), selectedCheckType)
                             }
                         },
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(containerColor = NeonCyan),
-                        shape = RoundedCornerShape(12.dp)
+                        modifier = Modifier.weight(1f).height(44.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryNavy),
+                        shape = RoundedCornerShape(8.dp)
                     ) {
-                        Text("Kirim", color = DarkBg, fontWeight = FontWeight.Bold)
+                        Text("Kirim", color = PureWhite, fontWeight = FontWeight.SemiBold)
                     }
                 }
             }

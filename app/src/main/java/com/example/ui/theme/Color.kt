@@ -2,17 +2,37 @@ package com.example.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-val NeonCyan = Color(0xFF00E5FF)
-val NeonGreen = Color(0xFF00E676)
-val NeonYellow = Color(0xFFFFD600)
-val NeonRed = Color(0xFFFF1744)
-val NeonPurple = Color(0xFF7C4DFF)
+// Minimalist Professional Clean White Theme Palettes
+val PrimaryNavy = Color(0xFF0F172A)
+val PrimaryBlue = Color(0xFF2563EB)
+val AccentGreen = Color(0xFF059669)
+val AccentAmber = Color(0xFFD97706)
+val AccentRed = Color(0xFFDC2626)
+val AccentPurple = Color(0xFF4F46E5)
 
-val DarkBg = Color(0xFF0B111E)
-val CardBg = Color(0xFF151F32)
-val CardBorder = Color(0xFF22324D)
-val InputBg = Color(0xFF0F172A)
+// White & Light Surfaces
+val LightBg = Color(0xFFF8FAFC)
+val PureWhite = Color(0xFFFFFFFF)
+val CardBorderLight = Color(0xFFE2E8F0)
+val InputBgLight = Color(0xFFF1F5F9)
 
-val TextPrimary = Color(0xFFF1F5F9)
-val TextSecondary = Color(0xFF94A3B8)
-val TextMuted = Color(0xFF64748B)
+// Crisp Executive Typography Colors
+val TextPrimaryLight = Color(0xFF0F172A)
+val TextSecondaryLight = Color(0xFF475569)
+val TextMutedLight = Color(0xFF94A3B8)
+
+// Backward compatible aliases to ensure smooth migration
+val NeonCyan = PrimaryNavy
+val NeonGreen = AccentGreen
+val NeonYellow = AccentAmber
+val NeonRed = AccentRed
+val NeonPurple = AccentPurple
+
+val DarkBg = LightBg
+val CardBg = PureWhite
+val CardBorder = CardBorderLight
+val InputBg = InputBgLight
+
+val TextPrimary = TextPrimaryLight
+val TextSecondary = TextSecondaryLight
+val TextMuted = TextMutedLight

@@ -2,7 +2,11 @@ package com.example.ui.kiosk
 
 import android.content.Context
 import android.util.Log
+import androidx.annotation.OptIn
 import androidx.camera.core.CameraSelector
+import androidx.camera.core.ExperimentalGetImage
+import androidx.camera.core.ImageAnalysis
+import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
@@ -18,15 +22,45 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.face.Face
+import com.google.mlkit.vision.face.FaceDetection
+import com.google.mlkit.vision.face.FaceDetector
+import com.google.mlkit.vision.face.FaceDetectorOptions
+import java.util.concurrent.Executors
 
+@OptIn(ExperimentalGetImage::class)
 @Composable
 fun LiveCameraPreview(
     modifier: Modifier = Modifier,
-    useFrontCamera: Boolean = true
+    useFrontCamera: Boolean = true,
+    onFacesDetected: (List<Face>) -> Unit = {}
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     var hasCameraError by remember { mutableStateOf(false) }
+
+    // Setup high-performance Real-Time ML Kit Face Detector
+    val faceDetector: FaceDetector = remember {
+        val options = FaceDetectorOptions.Builder()
+            .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_FAST)
+            .setClassificationMode(FaceDetectorOptions.CLASSIFICATION_MODE_ALL)
+            .setLandmarkMode(FaceDetectorOptions.LANDMARK_MODE_NONE)
+            .setContourMode(FaceDetectorOptions.CONTOUR_MODE_NONE)
+            .setMinFaceSize(0.15f)
+            .enableTracking()
+            .build()
+        FaceDetection.getClient(options)
+    }
+
+    val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            faceDetector.close()
+            cameraExecutor.shutdown()
+        }
+    }
 
     Box(modifier = modifier.fillMaxSize()) {
         AndroidView(
@@ -41,8 +75,37 @@ fun LiveCameraPreview(
                 cameraProviderFuture.addListener({
                     try {
                         val cameraProvider = cameraProviderFuture.get()
+                        
+                        // 1. Camera Preview Stream
                         val preview = Preview.Builder().build().also {
                             it.surfaceProvider = previewView.surfaceProvider
+                        }
+
+                        // 2. Real-Time Face Recognition & Analysis Stream
+                        val imageAnalysis = ImageAnalysis.Builder()
+                            .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                            .build()
+
+                        imageAnalysis.setAnalyzer(cameraExecutor) { imageProxy: ImageProxy ->
+                            val mediaImage = imageProxy.image
+                            if (mediaImage != null) {
+                                val image = InputImage.fromMediaImage(
+                                    mediaImage,
+                                    imageProxy.imageInfo.rotationDegrees
+                                )
+                                faceDetector.process(image)
+                                    .addOnSuccessListener { faces ->
+                                        onFacesDetected(faces)
+                                    }
+                                    .addOnFailureListener { e ->
+                                        Log.e("LiveCameraPreview", "ML Kit Face detection error", e)
+                                    }
+                                    .addOnCompleteListener {
+                                        imageProxy.close()
+                                    }
+                            } else {
+                                imageProxy.close()
+                            }
                         }
 
                         val cameraSelector = if (useFrontCamera && cameraProvider.hasCamera(CameraSelector.DEFAULT_FRONT_CAMERA)) {
@@ -55,7 +118,8 @@ fun LiveCameraPreview(
                         cameraProvider.bindToLifecycle(
                             lifecycleOwner,
                             cameraSelector,
-                            preview
+                            preview,
+                            imageAnalysis
                         )
                     } catch (exc: Exception) {
                         Log.e("LiveCameraPreview", "Camera bind failed", exc)
@@ -75,7 +139,7 @@ fun LiveCameraPreview(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "Mode Simulasi Kamera Kiosk Aktif",
+                    text = "Mode Kamera Kiosk Aktif",
                     color = Color(0xFF00E5FF)
                 )
             }
