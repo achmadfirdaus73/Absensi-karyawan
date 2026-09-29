@@ -15,7 +15,7 @@ import kotlinx.coroutines.launch
 
 @Database(
     entities = [Employee::class, AttendanceRecord::class, KioskSettings::class, AdminNotification::class],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -40,38 +40,12 @@ abstract class AppDatabase : RoomDatabase() {
                             super.onCreate(db)
                             CoroutineScope(Dispatchers.IO).launch {
                                 val database = getDatabase(context)
-                                database.attendanceDao().saveKioskSettings(KioskSettings())
-                                // Seed default demo employees
-                                database.employeeDao().insertEmployee(
-                                    Employee(
-                                        name = "Budi Santoso",
-                                        nik = "EMP-001",
-                                        division = "Teknologi Informasi",
-                                        role = "Manager",
-                                        shiftType = "MANUAL_CUSTOM",
-                                        customStartTime = "09:00",
-                                        customEndTime = "18:00",
-                                        pin = "1111"
-                                    )
-                                )
-                                database.employeeDao().insertEmployee(
-                                    Employee(
-                                        name = "Siti Rahmawati",
-                                        nik = "EMP-002",
-                                        division = "Operasional",
-                                        role = "Staff",
-                                        shiftType = "AUTO_DETECT",
-                                        pin = "2222"
-                                    )
-                                )
-                                database.employeeDao().insertEmployee(
-                                    Employee(
-                                        name = "Ahmad Hidayat",
-                                        nik = "EMP-003",
-                                        division = "Keamanan",
-                                        role = "Security",
-                                        shiftType = "SHIFT_3",
-                                        pin = "3333"
+                                // Only initialize default clean system settings (No dummy employees/records)
+                                database.attendanceDao().saveKioskSettings(
+                                    KioskSettings(
+                                        companyName = "Nama Perusahaan / Instansi",
+                                        address = "Alamat Kantor",
+                                        kioskPin = "8888"
                                     )
                                 )
                             }

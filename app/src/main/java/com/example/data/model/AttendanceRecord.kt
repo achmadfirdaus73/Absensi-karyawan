@@ -38,8 +38,8 @@ data class AttendanceRecord(
 data class KioskSettings(
     @PrimaryKey
     val id: Int = 1,
-    val companyName: String = "PT Sinar Digital Nusantara",
-    val address: String = "Jl. Sudirman No. 88, Jakarta Selatan",
+    val companyName: String = "Nama Perusahaan / Instansi",
+    val address: String = "Alamat Kantor",
     val latitude: Double = -6.2088,
     val longitude: Double = 106.8456,
     val radiusMeters: Double = 150.0,
