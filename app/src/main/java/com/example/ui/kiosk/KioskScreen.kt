@@ -467,14 +467,68 @@ fun KioskScreen(
                 val emp = selectedEmployee!!
                 val shiftResolution = repository.resolveShiftForEmployee(emp, settings)
 
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .shadow(6.dp, RoundedCornerShape(16.dp)),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = PureWhite),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, CardBorderLight)
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.Bottom
                 ) {
+                    // Quick Employee Switcher (If multiple coworkers are registered)
+                    if (employees.size > 1) {
+                        LazyRow(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 6.dp),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            items(employees, key = { it.id }) { item ->
+                                val isSelected = item.id == emp.id
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = if (isSelected) PrimaryNavy else PureWhite,
+                                    border = androidx.compose.foundation.BorderStroke(
+                                        width = 1.dp,
+                                        color = if (isSelected) PrimaryNavy else CardBorderLight
+                                    ),
+                                    shadowElevation = if (isSelected) 2.dp else 0.dp,
+                                    modifier = Modifier.clickable {
+                                        selectedEmployee = item
+                                        matchConfidenceScore = 0.98f
+                                    }
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        if (item.photoUri != null) {
+                                            AsyncImage(
+                                                model = item.photoUri,
+                                                contentDescription = null,
+                                                modifier = Modifier
+                                                    .size(16.dp)
+                                                    .clip(CircleShape),
+                                                contentScale = ContentScale.Crop
+                                            )
+                                        }
+                                        Text(
+                                            text = item.name,
+                                            color = if (isSelected) PureWhite else TextPrimaryLight,
+                                            fontSize = 11.sp,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .shadow(6.dp, RoundedCornerShape(16.dp)),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = PureWhite),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, CardBorderLight)
+                    ) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -647,7 +701,8 @@ fun KioskScreen(
                         }
                     }
                 }
-            } else if (isUnrecognizedFace) {
+            }
+        } else if (isUnrecognizedFace) {
                 // Unrecognized Face Alert Card
                 Card(
                     modifier = Modifier

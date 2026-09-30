@@ -557,10 +557,16 @@ fun RegisterEmployeeDialog(
                                 isSaving = true
                                 errorMessage = null
                                 coroutineScope.launch {
-                                    val embeddingJson = if (!photoUriString.isNullOrBlank()) {
-                                        val vector = com.example.util.FaceBiometricHelper.extractEmbeddingFromUri(context, photoUriString!!)
+                                    val embeddingJson = try {
+                                        val vector = if (capturedBitmap != null) {
+                                            com.example.util.FaceBiometricHelper.extractEmbeddingFromBitmap(capturedBitmap!!)
+                                        } else if (!photoUriString.isNullOrBlank()) {
+                                            com.example.util.FaceBiometricHelper.extractEmbeddingFromUri(context, photoUriString!!)
+                                        } else null
                                         if (vector != null) com.example.util.FaceBiometricHelper.serializeEmbedding(vector) else null
-                                    } else null
+                                    } catch (_: Exception) {
+                                        null
+                                    }
 
                                     val employee = (employeeToEdit ?: Employee(name = "", nik = "", division = "")).copy(
                                         name = name.trim(),
