@@ -75,11 +75,13 @@ class AttendanceRepository(context: Context) {
     suspend fun ensureEmployeeEmbeddings(context: Context, employees: List<Employee>) {
         withContext(Dispatchers.IO) {
             for (emp in employees) {
-                if (emp.faceEmbedding.isNullOrBlank() && !emp.photoUri.isNullOrBlank()) {
+                if (!emp.photoUri.isNullOrBlank()) {
                     val embedding = com.example.util.FaceBiometricHelper.extractEmbeddingFromUri(context, emp.photoUri)
                     if (embedding != null) {
                         val json = com.example.util.FaceBiometricHelper.serializeEmbedding(embedding)
-                        employeeDao.updateEmployee(emp.copy(faceEmbedding = json))
+                        if (emp.faceEmbedding != json) {
+                            employeeDao.updateEmployee(emp.copy(faceEmbedding = json))
+                        }
                     }
                 }
             }
@@ -88,37 +90,21 @@ class AttendanceRepository(context: Context) {
 
     /**
      * Matches live biometric face vector against registered employees' biometrics.
-     * Returns the best matching Employee and similarity score (0.0 - 1.0).
+     * Returns the best matching Employee and similarity score (0.0 - 1.0) ONLY if genuine match above threshold.
      */
     fun findBestMatchingEmployee(
         liveBiometricVector: FloatArray,
         employees: List<Employee>,
-        threshold: Float = 0.55f
+        threshold: Float = 0.85f
     ): Pair<Employee, Float>? {
         if (employees.isEmpty() || liveBiometricVector.isEmpty()) return null
 
-        // If only 1 employee is registered in the system
-        if (employees.size == 1) {
-            val singleEmp = employees.first()
-            val embedding = com.example.util.FaceBiometricHelper.deserializeEmbedding(singleEmp.faceEmbedding)
-            val score = if (embedding != null) {
-                com.example.util.FaceBiometricHelper.calculateSimilarity(liveBiometricVector, embedding)
-            } else {
-                0.95f
-            }
-            return Pair(singleEmp, maxOf(score, 0.92f))
-        }
-
-        var bestMatch: Employee = employees.first()
+        var bestMatch: Employee? = null
         var highestScore = 0f
 
         for (emp in employees) {
-            val empEmbedding = com.example.util.FaceBiometricHelper.deserializeEmbedding(emp.faceEmbedding)
-            val score = if (empEmbedding != null) {
-                com.example.util.FaceBiometricHelper.calculateSimilarity(liveBiometricVector, empEmbedding)
-            } else {
-                0.60f
-            }
+            val empEmbedding = com.example.util.FaceBiometricHelper.deserializeEmbedding(emp.faceEmbedding) ?: continue
+            val score = com.example.util.FaceBiometricHelper.calculateSimilarity(liveBiometricVector, empEmbedding)
 
             if (score > highestScore) {
                 highestScore = score
@@ -126,8 +112,13 @@ class AttendanceRepository(context: Context) {
             }
         }
 
-        val displayScore = if (highestScore > 0f) maxOf(highestScore, 0.91f) else 0.94f
-        return Pair(bestMatch, displayScore)
+        // Required threshold: strictly require real matching (default min 0.85)
+        val minAcceptableThreshold = if (threshold > 0f) threshold else 0.85f
+        return if (bestMatch != null && highestScore >= minAcceptableThreshold) {
+            Pair(bestMatch, highestScore)
+        } else {
+            null
+        }
     }
 
     suspend fun deleteAttendance(id: Long) {

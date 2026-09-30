@@ -44,7 +44,7 @@ object FaceBiometricHelper {
 
     /**
      * Extracts a 128-Dimensional Deep Feature Vector from a detected face
-     * (combining Deep Spatial Convolutions & Geometric Landmarks).
+     * (Deterministic landmark & geometric invariant descriptors).
      */
     fun extractFeatureVector(face: Face, sourceBitmap: Bitmap? = null): FloatArray {
         val embedding = FloatArray(EMBEDDING_DIM)
@@ -75,8 +75,8 @@ object FaceBiometricHelper {
         val eyeMidX = if (leftEye != null && rightEye != null) (leftEye.x + rightEye.x) / 2f else boxLeft + boxWidth / 2f
         val eyeMidY = if (leftEye != null && rightEye != null) (leftEye.y + rightEye.y) / 2f else boxTop + boxHeight * 0.35f
 
-        // 2. Primary 32 Structural & Relative Spatial Descriptors
-        embedding[0] = (boxWidth / boxHeight).coerceIn(0.5f, 1.8f)
+        // 2. Primary Structural Distances Normalized by Eye-Distance
+        embedding[0] = (boxWidth / boxHeight).coerceIn(0.5f, 2.0f)
         embedding[1] = (eyeDist / boxWidth).coerceIn(0.15f, 0.75f)
 
         if (noseBase != null) {
@@ -160,114 +160,51 @@ object FaceBiometricHelper {
         embedding[18] = abs(embedding[12] - embedding[13]) // Facial symmetry
         embedding[19] = abs(embedding[14] - embedding[15]) // Lower symmetry
 
-        // Cross ratio interactions (MobileFaceNet non-linear combinations)
-        for (i in 20 until 32) {
-            val idx1 = (i * 3) % 20
-            val idx2 = (i * 7) % 20
-            embedding[i] = (embedding[idx1] * 0.6f + embedding[idx2] * 0.4f).coerceIn(-1.0f, 2.0f)
-        }
-
-        // 3. Deep Texture & Pixel Distribution Channels (Features 32..127)
-        if (sourceBitmap != null && !sourceBitmap.isRecycled) {
-            try {
-                val safeCrop = getSafeCrop(sourceBitmap, box)
-                if (safeCrop != null) {
-                    val scaledFace = Bitmap.createScaledBitmap(safeCrop, 32, 32, true)
-                    extractSpatialTextureFeatures(scaledFace, embedding, 32)
-                    if (scaledFace != safeCrop) scaledFace.recycle()
-                }
-            } catch (e: Exception) {
-                Log.w(TAG, "Texture extraction fallback: ${e.message}")
-                fillSynthesizedDeepFeatures(embedding, 32)
-            }
+        // 3. Angles & Triangular Geometry (Features 20..47)
+        if (leftEye != null && rightEye != null && noseBase != null) {
+            val angleNoseLeft = atan2(noseBase.y - leftEye.y, noseBase.x - leftEye.x)
+            val angleNoseRight = atan2(noseBase.y - rightEye.y, noseBase.x - rightEye.x)
+            embedding[20] = angleNoseLeft
+            embedding[21] = angleNoseRight
+            embedding[22] = abs(angleNoseLeft - angleNoseRight)
+            // Triangle area Eye-Nose-Eye / eyeDist^2
+            val area = abs(leftEye.x * (rightEye.y - noseBase.y) + rightEye.x * (noseBase.y - leftEye.y) + noseBase.x * (leftEye.y - rightEye.y)) / 2f
+            embedding[23] = (area / (eyeDist * eyeDist)).coerceIn(0.1f, 1.5f)
         } else {
-            fillSynthesizedDeepFeatures(embedding, 32)
+            embedding[20] = 0.9f; embedding[21] = 2.2f; embedding[22] = 1.3f; embedding[23] = 0.45f
         }
 
-        // 4. L2 Normalization (Unit Hypersphere Projection)
+        if (mouthLeft != null && mouthRight != null && noseBase != null) {
+            val angleMouthLeft = atan2(mouthLeft.y - noseBase.y, mouthLeft.x - noseBase.x)
+            val angleMouthRight = atan2(mouthRight.y - noseBase.y, mouthRight.x - noseBase.x)
+            embedding[24] = angleMouthLeft
+            embedding[25] = angleMouthRight
+            embedding[26] = abs(angleMouthLeft - angleMouthRight)
+            val area = abs(noseBase.x * (mouthLeft.y - mouthRight.y) + mouthLeft.x * (mouthRight.y - noseBase.y) + mouthRight.x * (noseBase.y - mouthLeft.y)) / 2f
+            embedding[27] = (area / (eyeDist * eyeDist)).coerceIn(0.1f, 1.5f)
+        } else {
+            embedding[24] = 2.3f; embedding[25] = 0.8f; embedding[26] = 1.5f; embedding[27] = 0.35f
+        }
+
+        // Additional facial proportions
+        for (i in 28 until 48) {
+            val p1 = embedding[(i * 3) % 24]
+            val p2 = embedding[(i * 7 + 1) % 24]
+            embedding[i] = ((p1 * 0.7f + p2 * 0.3f) / (1f + abs(p1 - p2))).coerceIn(-2.0f, 2.0f)
+        }
+
+        // 4. Non-linear Fourier/Harmonic Spatial Projections (Features 48..127)
+        for (i in 48 until EMBEDDING_DIM) {
+            val base1 = embedding[(i * 2) % 48]
+            val base2 = embedding[(i * 5 + 3) % 48]
+            val freq = (i - 48) * 0.15f
+            embedding[i] = (sin(base1 * freq) * 0.6f + cos(base2 * freq) * 0.4f).coerceIn(-1.5f, 1.5f)
+        }
+
+        // 5. L2 Normalization (Unit Hypersphere Projection)
         l2Normalize(embedding)
 
         return embedding
-    }
-
-    private fun extractSpatialTextureFeatures(face32x32: Bitmap, outEmbedding: FloatArray, startOffset: Int) {
-        val w = face32x32.width
-        val h = face32x32.height
-        val gridRows = 4
-        val gridCols = 4
-        val cellW = w / gridCols
-        val cellH = h / gridRows
-
-        var featureIdx = startOffset
-        for (r in 0 until gridRows) {
-            for (c in 0 until gridCols) {
-                if (featureIdx >= EMBEDDING_DIM - 6) break
-                var meanLuma = 0f
-                var gradX = 0f
-                var gradY = 0f
-                var count = 0
-
-                val startX = c * cellW
-                val startY = r * cellH
-                for (y in startY until min(startY + cellH, h)) {
-                    for (x in startX until min(startX + cellW, w)) {
-                        val pixel = face32x32.getPixel(x, y)
-                        val rVal = Color.red(pixel)
-                        val gVal = Color.green(pixel)
-                        val bVal = Color.blue(pixel)
-                        val luma = (0.299f * rVal + 0.587f * gVal + 0.114f * bVal) / 255.0f
-
-                        meanLuma += luma
-                        if (x > 0) {
-                            val prevPix = face32x32.getPixel(x - 1, y)
-                            val prevLuma = (0.299f * Color.red(prevPix) + 0.587f * Color.green(prevPix) + 0.114f * Color.blue(prevPix)) / 255.0f
-                            gradX += abs(luma - prevLuma)
-                        }
-                        if (y > 0) {
-                            val prevPix = face32x32.getPixel(x, y - 1)
-                            val prevLuma = (0.299f * Color.red(prevPix) + 0.587f * Color.green(prevPix) + 0.114f * Color.blue(prevPix)) / 255.0f
-                            gradY += abs(luma - prevLuma)
-                        }
-                        count++
-                    }
-                }
-
-                if (count > 0) {
-                    outEmbedding[featureIdx++] = (meanLuma / count) - 0.5f
-                    if (featureIdx < EMBEDDING_DIM) {
-                        outEmbedding[featureIdx++] = (gradX / count) * 2.0f
-                    }
-                    if (featureIdx < EMBEDDING_DIM) {
-                        outEmbedding[featureIdx++] = (gradY / count) * 2.0f
-                    }
-                }
-            }
-        }
-
-        while (featureIdx < EMBEDDING_DIM) {
-            outEmbedding[featureIdx] = outEmbedding[featureIdx - 16] * 0.7f
-            featureIdx++
-        }
-    }
-
-    private fun fillSynthesizedDeepFeatures(embedding: FloatArray, startOffset: Int) {
-        for (i in startOffset until EMBEDDING_DIM) {
-            val baseIdx = (i * 5) % 32
-            val modifier = ((i * 13) % 100) / 100f
-            embedding[i] = (embedding[baseIdx] * (0.5f + modifier * 0.5f)) - 0.25f
-        }
-    }
-
-    private fun getSafeCrop(bitmap: Bitmap, box: Rect): Bitmap? {
-        val marginX = (box.width() * 0.1f).toInt()
-        val marginY = (box.height() * 0.1f).toInt()
-        val left = max(0, box.left - marginX)
-        val top = max(0, box.top - marginY)
-        val width = min(bitmap.width - left, box.width() + marginX * 2)
-        val height = min(bitmap.height - top, box.height() + marginY * 2)
-
-        if (width <= 0 || height <= 0) return null
-        return Bitmap.createBitmap(bitmap, left, top, width, height)
     }
 
     private fun l2Normalize(vector: FloatArray) {
@@ -296,9 +233,9 @@ object FaceBiometricHelper {
 
                 val vector = if (faces.isNotEmpty()) {
                     val primaryFace = faces.maxByOrNull { f -> f.boundingBox.width() * f.boundingBox.height() } ?: faces.first()
-                    extractFeatureVector(primaryFace, bitmap)
+                    extractFeatureVector(primaryFace)
                 } else {
-                    FloatArray(EMBEDDING_DIM) { 0.088f }
+                    null
                 }
                 bitmap.recycle()
                 vector
@@ -323,9 +260,9 @@ object FaceBiometricHelper {
 
                 if (faces.isNotEmpty()) {
                     val primaryFace = faces.maxByOrNull { f -> f.boundingBox.width() * f.boundingBox.height() } ?: faces.first()
-                    extractFeatureVector(primaryFace, bitmap)
+                    extractFeatureVector(primaryFace)
                 } else {
-                    FloatArray(EMBEDDING_DIM) { 0.088f }
+                    null
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error extracting embedding from bitmap", e)
@@ -335,8 +272,8 @@ object FaceBiometricHelper {
     }
 
     /**
-     * Compares two 128-D biometric feature vectors using Cosine & Euclidean similarity.
-     * Returns calibrated confidence score (0.0 to 1.0).
+     * Compares two 128-D biometric feature vectors using pure Cosine similarity on the unit hypersphere.
+     * Returns true similarity score (0.0 to 1.0).
      */
     fun calculateSimilarity(v1: FloatArray, v2: FloatArray): Float {
         if (v1.isEmpty() || v2.isEmpty()) return 0f
@@ -344,7 +281,6 @@ object FaceBiometricHelper {
         var dot = 0f
         var norm1 = 0f
         var norm2 = 0f
-        var euclideanDist = 0f
 
         for (i in 0 until len) {
             val a = v1[i]
@@ -352,8 +288,6 @@ object FaceBiometricHelper {
             dot += a * b
             norm1 += a * a
             norm2 += b * b
-            val diff = a - b
-            euclideanDist += diff * diff
         }
 
         val cosineSim = if (norm1 > 0f && norm2 > 0f) {
@@ -362,17 +296,7 @@ object FaceBiometricHelper {
             0f
         }
 
-        val euclideanSim = (1f - (sqrt(euclideanDist) / 1.414f)).coerceIn(0f, 1f)
-        
-        // Composite Score (80% Cosine Vector + 20% Euclidean Geometry)
-        val rawScore = (cosineSim * 0.80f + euclideanSim * 0.20f).coerceIn(0f, 1f)
-        
-        // Calibrated Mapping: 0.50+ raw translates to confident 90% - 99% match
-        return if (rawScore > 0.45f) {
-            0.85f + (rawScore - 0.45f) * (0.14f / 0.55f)
-        } else {
-            rawScore * 1.5f
-        }.coerceIn(0f, 0.99f)
+        return cosineSim.coerceIn(0f, 0.99f)
     }
 
     fun serializeEmbedding(features: FloatArray): String {

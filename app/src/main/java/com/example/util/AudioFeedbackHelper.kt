@@ -27,8 +27,16 @@ class AudioFeedbackHelper(context: Context) {
         }
     }
 
+    fun playSuccessBeep() {
+        speak("Pendaftaran wajah berhasil")
+    }
+
     fun shutdown() {
         tts?.stop()
         tts?.shutdown()
+    }
+
+    fun release() {
+        shutdown()
     }
 }

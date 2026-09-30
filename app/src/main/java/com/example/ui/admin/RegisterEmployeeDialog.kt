@@ -59,6 +59,8 @@ fun RegisterEmployeeDialog(
     
     // Photo State
     var photoUriString by remember { mutableStateOf(employeeToEdit?.photoUri) }
+    var enrolledFaceEmbedding by remember { mutableStateOf(employeeToEdit?.faceEmbedding) }
+    var showFaceIdEnrollment by remember { mutableStateOf(false) }
     var capturedBitmap by remember { mutableStateOf<Bitmap?>(null) }
     var isSaving by remember { mutableStateOf(false) }
 
@@ -257,26 +259,44 @@ fun RegisterEmployeeDialog(
                             }
 
                             Column(modifier = Modifier.weight(1f)) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Text(
+                                        text = "Biometrik Wajah",
+                                        color = TextPrimaryLight,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp
+                                    )
+                                    if (enrolledFaceEmbedding != null) {
+                                        Surface(
+                                            color = AccentGreen.copy(alpha = 0.12f),
+                                            shape = RoundedCornerShape(4.dp)
+                                        ) {
+                                            Text(
+                                                text = "✓ Terkalibrasi",
+                                                color = AccentGreen,
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                            )
+                                        }
+                                    }
+                                }
                                 Text(
-                                    text = "Foto Wajah Karyawan",
-                                    color = TextPrimaryLight,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 14.sp
-                                )
-                                Text(
-                                    text = "Ambil foto langsung untuk pengenalan wajah",
+                                    text = if (enrolledFaceEmbedding != null) "Vektor biometrik aktif & siap untuk Kiosk" else "Daftarkan wajah dengan pemindai Face ID",
                                     color = TextSecondaryLight,
                                     fontSize = 11.sp
                                 )
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     Button(
-                                        onClick = { takePhotoLauncher.launch(null) },
+                                        onClick = { showFaceIdEnrollment = true },
                                         colors = ButtonDefaults.buttonColors(containerColor = PrimaryNavy),
                                         shape = RoundedCornerShape(8.dp),
                                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                                     ) {
-                                        Text("Ambil Foto", color = PureWhite, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                        Icon(Icons.Default.Face, contentDescription = null, modifier = Modifier.size(16.dp), tint = PureWhite)
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Pindai Face ID", color = PureWhite, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                                     }
 
                                     OutlinedButton(
@@ -626,7 +646,7 @@ fun RegisterEmployeeDialog(
                                         customEndTime = customEndTime.trim(),
                                         pin = pin.trim(),
                                         photoUri = photoUriString,
-                                        faceEmbedding = embeddingJson ?: employeeToEdit?.faceEmbedding
+                                        faceEmbedding = enrolledFaceEmbedding ?: embeddingJson ?: employeeToEdit?.faceEmbedding
                                     )
                                     onSaveEmployee(employee)
                                     isSaving = false
@@ -650,5 +670,18 @@ fun RegisterEmployeeDialog(
                 }
             }
         }
+    }
+
+    // Interactive Apple-Style Face ID Scanner Dialog
+    if (showFaceIdEnrollment) {
+        FaceIdEnrollmentDialog(
+            employeeName = name,
+            onDismiss = { showFaceIdEnrollment = false },
+            onEnrollmentComplete = { photoPath, masterEmbeddingJson ->
+                photoUriString = photoPath
+                enrolledFaceEmbedding = masterEmbeddingJson
+                showFaceIdEnrollment = false
+            }
+        )
     }
 }
