@@ -40,6 +40,7 @@ import coil.compose.AsyncImage
 import com.example.data.model.*
 import com.example.data.repository.AttendanceRepository
 import com.example.ui.theme.*
+import com.example.util.ExportReportHelper
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
@@ -180,6 +181,7 @@ fun AdminDashboardScreen(
                     )
                     1 -> AttendanceLogsTab(
                         records = attendanceRecords,
+                        companyName = currentSettings.companyName,
                         onDeleteRecord = { id ->
                             coroutineScope.launch {
                                 repository.deleteAttendance(id)
@@ -356,9 +358,18 @@ fun EmployeesTab(
                                         .border(1.dp, CardBorderLight, RoundedCornerShape(10.dp)),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    if (!emp.photoUri.isNullOrEmpty()) {
+                                    val employeeImageModel = remember(emp.photoUri) {
+                                        val path = emp.photoUri
+                                        if (path.isNullOrBlank()) null
+                                        else if (path.startsWith("/")) {
+                                            val f = java.io.File(path)
+                                            if (f.exists() && f.length() > 0) f else null
+                                        } else android.net.Uri.parse(path)
+                                    }
+
+                                    if (employeeImageModel != null) {
                                         AsyncImage(
-                                            model = emp.photoUri,
+                                            model = employeeImageModel,
                                             contentDescription = emp.name,
                                             modifier = Modifier.fillMaxSize(),
                                             contentScale = ContentScale.Crop
@@ -441,124 +452,245 @@ fun EmployeesTab(
 @Composable
 fun AttendanceLogsTab(
     records: List<AttendanceRecord>,
+    companyName: String,
     onDeleteRecord: (Long) -> Unit
 ) {
+    val context = LocalContext.current
     val dateFormat = SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale.getDefault())
+    val dayFormat = SimpleDateFormat("yyyyMMdd", Locale.getDefault())
+    val monthFormat = SimpleDateFormat("yyyyMM", Locale.getDefault())
+    val now = Date()
+    val todayKey = dayFormat.format(now)
+    val thisMonthKey = monthFormat.format(now)
 
-    if (records.isEmpty()) {
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
+    var filterType by remember { mutableIntStateOf(0) } // 0: Semua, 1: Hari Ini, 2: Bulan Ini
+    var logSearchQuery by remember { mutableStateOf("") }
+
+    val filteredRecords = records.filter { record ->
+        val recordDate = Date(record.timestamp)
+        val matchesFilter = when (filterType) {
+            1 -> dayFormat.format(recordDate) == todayKey
+            2 -> monthFormat.format(recordDate) == thisMonthKey
+            else -> true
+        }
+        val matchesQuery = if (logSearchQuery.isBlank()) true else {
+            record.employeeName.contains(logSearchQuery, ignoreCase = true) ||
+            record.nik.contains(logSearchQuery, ignoreCase = true) ||
+            record.role.contains(logSearchQuery, ignoreCase = true) ||
+            record.shiftName.contains(logSearchQuery, ignoreCase = true)
+        }
+        matchesFilter && matchesQuery
+    }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        // Top Action Bar: Search & Export CSV/Excel
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("Belum ada riwayat presensi tersimpan", color = TextSecondaryLight, fontSize = 14.sp)
+            Text(
+                text = "Total Log: ${filteredRecords.size}",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = TextPrimaryLight
+            )
+
+            Button(
+                onClick = {
+                    ExportReportHelper.exportAndShareCsv(
+                        context = context,
+                        companyName = companyName,
+                        records = filteredRecords
+                    )
+                },
+                enabled = filteredRecords.isNotEmpty(),
+                colors = ButtonDefaults.buttonColors(containerColor = PrimaryNavy),
+                shape = RoundedCornerShape(8.dp),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+            ) {
+                Icon(Icons.Default.Share, contentDescription = "Ekspor CSV/Excel", modifier = Modifier.size(16.dp), tint = PureWhite)
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Ekspor CSV / Excel", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = PureWhite)
             }
         }
-    } else {
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            items(records, key = { it.id }) { record ->
-                val (statusText, statusBg, statusColor) = when (record.status) {
-                    AttendanceStatus.ON_TIME -> Triple("Tepat Waktu", AccentGreen.copy(alpha = 0.10f), AccentGreen)
-                    AttendanceStatus.LATE -> Triple("Terlambat", AccentRed.copy(alpha = 0.10f), AccentRed)
-                    AttendanceStatus.EARLY_DEPARTURE -> Triple("Pulang Awal", AccentAmber.copy(alpha = 0.10f), AccentAmber)
-                    AttendanceStatus.OVERTIME -> Triple("Lembur", AccentPurple.copy(alpha = 0.10f), AccentPurple)
-                }
 
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .shadow(2.dp, RoundedCornerShape(12.dp)),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = PureWhite),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, CardBorderLight)
-                ) {
-                    Row(
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // Filter Chips
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            FilterChip(
+                selected = filterType == 0,
+                onClick = { filterType = 0 },
+                label = { Text("Semua (${records.size})") }
+            )
+            FilterChip(
+                selected = filterType == 1,
+                onClick = { filterType = 1 },
+                label = { Text("Hari Ini") }
+            )
+            FilterChip(
+                selected = filterType == 2,
+                onClick = { filterType = 2 },
+                label = { Text("Bulan Ini") }
+            )
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        OutlinedTextField(
+            value = logSearchQuery,
+            onValueChange = { logSearchQuery = it },
+            placeholder = { Text("Cari log karyawan, NIK, shift...") },
+            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = TextSecondaryLight) },
+            trailingIcon = {
+                if (logSearchQuery.isNotEmpty()) {
+                    IconButton(onClick = { logSearchQuery = "" }) {
+                        Icon(Icons.Default.Close, contentDescription = "Clear", tint = TextMutedLight)
+                    }
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            shape = RoundedCornerShape(10.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = PrimaryNavy,
+                unfocusedBorderColor = CardBorderLight,
+                focusedTextColor = TextPrimaryLight,
+                unfocusedTextColor = TextPrimaryLight
+            )
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        if (filteredRecords.isEmpty()) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = if (records.isEmpty()) "Belum ada riwayat presensi tersimpan" else "Tidak ada log presensi yang cocok",
+                        color = TextSecondaryLight,
+                        fontSize = 14.sp
+                    )
+                }
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                items(filteredRecords, key = { it.id }) { record ->
+                    val (statusText, statusBg, statusColor) = when (record.status) {
+                        AttendanceStatus.ON_TIME -> Triple("Tepat Waktu", AccentGreen.copy(alpha = 0.10f), AccentGreen)
+                        AttendanceStatus.LATE -> Triple("Terlambat", AccentRed.copy(alpha = 0.10f), AccentRed)
+                        AttendanceStatus.EARLY_DEPARTURE -> Triple("Pulang Awal", AccentAmber.copy(alpha = 0.10f), AccentAmber)
+                        AttendanceStatus.OVERTIME -> Triple("Lembur", AccentPurple.copy(alpha = 0.10f), AccentPurple)
+                    }
+
+                    Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                            .shadow(2.dp, RoundedCornerShape(12.dp)),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = PureWhite),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, CardBorderLight)
                     ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Text(
-                                    text = record.employeeName,
-                                    fontWeight = FontWeight.Bold,
-                                    color = TextPrimaryLight,
-                                    fontSize = 15.sp
-                                )
-                                Surface(
-                                    color = InputBgLight,
-                                    shape = RoundedCornerShape(4.dp),
-                                    border = androidx.compose.foundation.BorderStroke(1.dp, CardBorderLight)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
                                     Text(
-                                        text = record.role,
-                                        color = PrimaryNavy,
-                                        fontSize = 9.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.5.dp)
-                                    )
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.height(2.dp))
-
-                            Text(
-                                text = "NIK: ${record.nik} • ${record.shiftName}",
-                                color = TextSecondaryLight,
-                                fontSize = 12.sp
-                            )
-
-                            Spacer(modifier = Modifier.height(4.dp))
-
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Surface(
-                                    color = if (record.checkType == CheckType.CHECK_IN) PrimaryNavy else AccentGreen,
-                                    shape = RoundedCornerShape(4.dp)
-                                ) {
-                                    Text(
-                                        text = if (record.checkType == CheckType.CHECK_IN) "MASUK" else "PULANG",
-                                        color = PureWhite,
+                                        text = record.employeeName,
                                         fontWeight = FontWeight.Bold,
-                                        fontSize = 10.sp,
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        color = TextPrimaryLight,
+                                        fontSize = 15.sp
+                                    )
+                                    Surface(
+                                        color = InputBgLight,
+                                        shape = RoundedCornerShape(4.dp),
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, CardBorderLight)
+                                    ) {
+                                        Text(
+                                            text = record.role,
+                                            color = PrimaryNavy,
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.5.dp)
+                                        )
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(2.dp))
+
+                                Text(
+                                    text = "NIK: ${record.nik} • ${record.shiftName}",
+                                    color = TextSecondaryLight,
+                                    fontSize = 12.sp
+                                )
+
+                                Spacer(modifier = Modifier.height(4.dp))
+
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Surface(
+                                        color = if (record.checkType == CheckType.CHECK_IN) PrimaryNavy else AccentGreen,
+                                        shape = RoundedCornerShape(4.dp)
+                                    ) {
+                                        Text(
+                                            text = if (record.checkType == CheckType.CHECK_IN) "MASUK" else "PULANG",
+                                            color = PureWhite,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 10.sp,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        )
+                                    }
+
+                                    Surface(
+                                        color = statusBg,
+                                        shape = RoundedCornerShape(4.dp)
+                                    ) {
+                                        Text(
+                                            text = statusText,
+                                            color = statusColor,
+                                            fontWeight = FontWeight.SemiBold,
+                                            fontSize = 10.sp,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        )
+                                    }
+
+                                    Text(
+                                        text = "Akurasi: ${(record.confidenceScore * 100).toInt()}%",
+                                        color = TextMutedLight,
+                                        fontSize = 10.sp
                                     )
                                 }
 
-                                Surface(
-                                    color = statusBg,
-                                    shape = RoundedCornerShape(4.dp)
-                                ) {
-                                    Text(
-                                        text = statusText,
-                                        color = statusColor,
-                                        fontWeight = FontWeight.SemiBold,
-                                        fontSize = 10.sp,
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                    )
-                                }
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = dateFormat.format(Date(record.timestamp)),
+                                    color = TextMutedLight,
+                                    fontSize = 11.sp
+                                )
                             }
 
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = dateFormat.format(Date(record.timestamp)),
-                                color = TextMutedLight,
-                                fontSize = 11.sp
-                            )
-                        }
-
-                        IconButton(onClick = { onDeleteRecord(record.id) }) {
-                            Icon(Icons.Default.Delete, contentDescription = "Hapus Log", tint = TextMutedLight, modifier = Modifier.size(18.dp))
+                            IconButton(onClick = { onDeleteRecord(record.id) }) {
+                                Icon(Icons.Default.Delete, contentDescription = "Hapus Log", tint = TextMutedLight, modifier = Modifier.size(18.dp))
+                            }
                         }
                     }
                 }
@@ -869,7 +1001,46 @@ fun KioskSettingsTab(
             }
         }
 
-        // 4. Keamanan PIN Admin
+        // 4. Ekspor & Backup Data Presensi (CSV / Excel)
+        val allRecords by repository.allAttendanceRecords.collectAsState(initial = emptyList())
+        Card(
+            modifier = Modifier.fillMaxWidth().shadow(2.dp, RoundedCornerShape(12.dp)),
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(containerColor = PureWhite),
+            border = androidx.compose.foundation.BorderStroke(1.dp, CardBorderLight)
+        ) {
+            Column(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(Icons.Default.Share, contentDescription = null, tint = PrimaryNavy, modifier = Modifier.size(20.dp))
+                    Text("Ekspor & Backup Laporan Presensi", color = TextPrimaryLight, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                }
+                Text(
+                    text = "Unduh atau bagikan seluruh arsip riwayat presensi karyawan (${allRecords.size} catatan) dalam format file .CSV yang kompatibel langsung dengan Microsoft Excel, Google Sheets, atau aplikasi Spreadsheet lainnya.",
+                    color = TextSecondaryLight,
+                    fontSize = 12.sp,
+                    lineHeight = 17.sp
+                )
+                Button(
+                    onClick = {
+                        ExportReportHelper.exportAndShareCsv(
+                            context = context,
+                            companyName = companyName,
+                            records = allRecords
+                        )
+                    },
+                    enabled = allRecords.isNotEmpty(),
+                    modifier = Modifier.fillMaxWidth().height(42.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryNavy)
+                ) {
+                    Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp), tint = PureWhite)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Ekspor Seluruh Laporan (CSV / Excel)", color = PureWhite, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                }
+            }
+        }
+
+        // 5. Keamanan PIN Admin
         Card(
             modifier = Modifier.fillMaxWidth().shadow(2.dp, RoundedCornerShape(12.dp)),
             shape = RoundedCornerShape(12.dp),

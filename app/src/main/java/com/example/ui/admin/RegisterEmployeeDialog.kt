@@ -62,20 +62,47 @@ fun RegisterEmployeeDialog(
     var capturedBitmap by remember { mutableStateOf<Bitmap?>(null) }
     var isSaving by remember { mutableStateOf(false) }
 
+    fun saveBitmapToInternal(bitmap: Bitmap): String? {
+        return try {
+            val dir = File(context.filesDir, "employee_photos")
+            if (!dir.exists()) dir.mkdirs()
+            val file = File(dir, "emp_${System.currentTimeMillis()}.jpg")
+            FileOutputStream(file).use { out ->
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 92, out)
+            }
+            file.absolutePath
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+
+    fun saveUriToInternal(uri: Uri): String? {
+        return try {
+            val dir = File(context.filesDir, "employee_photos")
+            if (!dir.exists()) dir.mkdirs()
+            val file = File(dir, "emp_${System.currentTimeMillis()}.jpg")
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                FileOutputStream(file).use { output ->
+                    input.copyTo(output)
+                }
+            }
+            file.absolutePath
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+
     // Camera Capture Launcher
     val takePhotoLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.TakePicturePreview()
     ) { bitmap ->
         if (bitmap != null) {
             capturedBitmap = bitmap
-            try {
-                val file = File(context.filesDir, "emp_${System.currentTimeMillis()}.jpg")
-                FileOutputStream(file).use { out ->
-                    bitmap.compress(Bitmap.CompressFormat.JPEG, 90, out)
-                }
-                photoUriString = file.absolutePath
-            } catch (e: Exception) {
-                e.printStackTrace()
+            val savedPath = saveBitmapToInternal(bitmap)
+            if (savedPath != null) {
+                photoUriString = savedPath
             }
         }
     }
@@ -85,8 +112,13 @@ fun RegisterEmployeeDialog(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         if (uri != null) {
-            photoUriString = uri.toString()
             capturedBitmap = null
+            val savedPath = saveUriToInternal(uri)
+            if (savedPath != null) {
+                photoUriString = savedPath
+            } else {
+                photoUriString = uri.toString()
+            }
         }
     }
 
@@ -180,10 +212,19 @@ fun RegisterEmployeeDialog(
                                 modifier = Modifier
                                     .size(70.dp)
                                     .clip(RoundedCornerShape(12.dp))
-                                    .background(PureWhite)
+                                    .background(InputBgLight)
                                     .border(1.dp, CardBorderLight, RoundedCornerShape(12.dp)),
                                 contentAlignment = Alignment.Center
                             ) {
+                                val currentModel = remember(photoUriString) {
+                                    val path = photoUriString
+                                    if (path.isNullOrBlank()) null
+                                    else if (path.startsWith("/")) {
+                                        val f = File(path)
+                                        if (f.exists()) f else null
+                                    } else Uri.parse(path)
+                                }
+
                                 if (capturedBitmap != null) {
                                     Image(
                                         bitmap = capturedBitmap!!.asImageBitmap(),
@@ -191,12 +232,19 @@ fun RegisterEmployeeDialog(
                                         modifier = Modifier.fillMaxSize(),
                                         contentScale = ContentScale.Crop
                                     )
-                                } else if (!photoUriString.isNullOrEmpty()) {
+                                } else if (currentModel != null) {
                                     AsyncImage(
-                                        model = photoUriString,
+                                        model = currentModel,
                                         contentDescription = "Foto Karyawan",
                                         modifier = Modifier.fillMaxSize(),
                                         contentScale = ContentScale.Crop
+                                    )
+                                } else if (name.isNotBlank()) {
+                                    Text(
+                                        text = name.trim().take(2).uppercase(),
+                                        color = PrimaryNavy,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 22.sp
                                     )
                                 } else {
                                     Icon(
