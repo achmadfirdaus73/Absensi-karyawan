@@ -467,68 +467,14 @@ fun KioskScreen(
                 val emp = selectedEmployee!!
                 val shiftResolution = repository.resolveShiftForEmployee(emp, settings)
 
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.Bottom
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .shadow(6.dp, RoundedCornerShape(16.dp)),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = PureWhite),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, CardBorderLight)
                 ) {
-                    // Quick Employee Switcher (If multiple coworkers are registered)
-                    if (employees.size > 1) {
-                        LazyRow(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = 6.dp),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            items(employees, key = { it.id }) { item ->
-                                val isSelected = item.id == emp.id
-                                Surface(
-                                    shape = RoundedCornerShape(8.dp),
-                                    color = if (isSelected) PrimaryNavy else PureWhite,
-                                    border = androidx.compose.foundation.BorderStroke(
-                                        width = 1.dp,
-                                        color = if (isSelected) PrimaryNavy else CardBorderLight
-                                    ),
-                                    shadowElevation = if (isSelected) 2.dp else 0.dp,
-                                    modifier = Modifier.clickable {
-                                        selectedEmployee = item
-                                        matchConfidenceScore = 0.98f
-                                    }
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                    ) {
-                                        if (item.photoUri != null) {
-                                            AsyncImage(
-                                                model = item.photoUri,
-                                                contentDescription = null,
-                                                modifier = Modifier
-                                                    .size(16.dp)
-                                                    .clip(CircleShape),
-                                                contentScale = ContentScale.Crop
-                                            )
-                                        }
-                                        Text(
-                                            text = item.name,
-                                            color = if (isSelected) PureWhite else TextPrimaryLight,
-                                            fontSize = 11.sp,
-                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .shadow(6.dp, RoundedCornerShape(16.dp)),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(containerColor = PureWhite),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, CardBorderLight)
-                    ) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -541,6 +487,9 @@ fun KioskScreen(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Row(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .padding(end = 8.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
@@ -570,7 +519,7 @@ fun KioskScreen(
                                     }
                                 }
 
-                                Column {
+                                Column(modifier = Modifier.weight(1f)) {
                                     Row(
                                         verticalAlignment = Alignment.CenterVertically,
                                         horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -579,7 +528,9 @@ fun KioskScreen(
                                             text = emp.name,
                                             fontWeight = FontWeight.Bold,
                                             fontSize = 15.sp,
-                                            color = TextPrimaryLight
+                                            color = TextPrimaryLight,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
                                         )
 
                                         Surface(
@@ -597,23 +548,15 @@ fun KioskScreen(
                                         }
                                     }
 
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                    ) {
-                                        Text(
-                                            text = "NIK: ${emp.nik} • ${emp.division}",
-                                            color = TextSecondaryLight,
-                                            fontSize = 11.sp
-                                        )
-                                        Text(text = "•", color = TextMutedLight)
-                                        Text(
-                                            text = "${shiftResolution.shiftName} (${shiftResolution.startTime}-${shiftResolution.endTime})",
-                                            color = PrimaryBlue,
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.Medium
-                                        )
-                                    }
+                                    Spacer(modifier = Modifier.height(2.dp))
+
+                                    Text(
+                                        text = "NIK: ${emp.nik} • ${emp.division} • ${shiftResolution.shiftName}",
+                                        color = TextSecondaryLight,
+                                        fontSize = 11.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
                                 }
                             }
 
@@ -627,7 +570,8 @@ fun KioskScreen(
                                     color = AccentGreen,
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                                    maxLines = 1,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                                 )
                             }
                         }
@@ -701,8 +645,7 @@ fun KioskScreen(
                         }
                     }
                 }
-            }
-        } else if (isUnrecognizedFace) {
+            } else if (isUnrecognizedFace) {
                 // Unrecognized Face Alert Card
                 Card(
                     modifier = Modifier
