@@ -95,20 +95,27 @@ fun KioskScreen(
 
     // Live Face Recognition State
     var isLiveFaceDetected by remember { mutableStateOf(false) }
-    var liveFaceCount by remember { mutableStateOf(0) }
-    var lastFaceDetectionTime by remember { mutableStateOf(0L) }
-
-    // Currently identified person in front of the camera (null when idle)
+    var isUnrecognizedFace by remember { mutableStateOf(false) }
     var selectedEmployee by remember { mutableStateOf<Employee?>(null) }
+    var matchConfidenceScore by remember { mutableFloatStateOf(0.98f) }
+    var lastFaceDetectionTime by remember { mutableStateOf(0L) }
     var isProcessingAttendance by remember { mutableStateOf(false) }
 
-    // Auto-clear badge when person walks away (no face detected for 2 seconds)
+    // Auto-calculate biometric embeddings for existing registered employees if not yet cached
+    LaunchedEffect(employees) {
+        if (employees.isNotEmpty()) {
+            repository.ensureEmployeeEmbeddings(context, employees)
+        }
+    }
+
+    // Auto-clear badge when person walks away (no face detected for 2.2 seconds)
     LaunchedEffect(lastFaceDetectionTime) {
         if (lastFaceDetectionTime > 0) {
             delay(2200)
             if (System.currentTimeMillis() - lastFaceDetectionTime >= 2000) {
                 isLiveFaceDetected = false
                 selectedEmployee = null
+                isUnrecognizedFace = false
             }
         }
     }
@@ -150,12 +157,31 @@ fun KioskScreen(
                 onFacesDetected = { faces: List<Face> ->
                     if (faces.isNotEmpty()) {
                         isLiveFaceDetected = true
-                        liveFaceCount = faces.size
                         lastFaceDetectionTime = System.currentTimeMillis()
-                        // If no employee currently active, select first available matching profile
-                        if (selectedEmployee == null && employees.isNotEmpty()) {
-                            selectedEmployee = employees.first()
+                    }
+                },
+                onFaceBiometrics = { face: Face, liveVector: FloatArray ->
+                    isLiveFaceDetected = true
+                    lastFaceDetectionTime = System.currentTimeMillis()
+
+                    if (employees.isNotEmpty()) {
+                        val match = repository.findBestMatchingEmployee(
+                            liveBiometricVector = liveVector,
+                            employees = employees,
+                            threshold = settings.faceConfidenceThreshold
+                        )
+
+                        if (match != null) {
+                            selectedEmployee = match.first
+                            matchConfidenceScore = match.second
+                            isUnrecognizedFace = false
+                        } else {
+                            selectedEmployee = null
+                            isUnrecognizedFace = true
                         }
+                    } else {
+                        selectedEmployee = null
+                        isUnrecognizedFace = false
                     }
                 }
             )
@@ -208,7 +234,12 @@ fun KioskScreen(
                 .scale(scanPulseScale),
             contentAlignment = Alignment.Center
         ) {
-            val bracketColor = if (isLiveFaceDetected) AccentGreen else PrimaryNavy.copy(alpha = 0.6f)
+            val bracketColor = when {
+                selectedEmployee != null -> AccentGreen
+                isUnrecognizedFace && isLiveFaceDetected -> AccentAmber
+                isLiveFaceDetected -> PrimaryNavy
+                else -> PrimaryNavy.copy(alpha = 0.6f)
+            }
 
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val cornerLength = 32.dp.toPx()
@@ -250,6 +281,13 @@ fun KioskScreen(
                             contentScale = ContentScale.Crop
                         )
                     }
+                } else if (isUnrecognizedFace && isLiveFaceDetected) {
+                    Icon(
+                        imageVector = Icons.Default.PersonSearch,
+                        contentDescription = null,
+                        tint = AccentAmber,
+                        modifier = Modifier.size(52.dp)
+                    )
                 } else {
                     Icon(
                         imageVector = Icons.Default.Face,
@@ -272,11 +310,21 @@ fun KioskScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(5.dp)
                     ) {
-                        if (isLiveFaceDetected) {
+                        if (selectedEmployee != null) {
                             Box(modifier = Modifier.size(6.dp).background(AccentGreen, CircleShape))
+                        } else if (isUnrecognizedFace && isLiveFaceDetected) {
+                            Box(modifier = Modifier.size(6.dp).background(AccentAmber, CircleShape))
                         }
+
+                        val statusLabel = when {
+                            selectedEmployee != null -> "Wajah Cocok: ${selectedEmployee!!.name} (${(matchConfidenceScore * 100).toInt()}%)"
+                            isUnrecognizedFace && isLiveFaceDetected -> "Wajah Belum Terdaftar"
+                            isLiveFaceDetected -> "Memindai Biometrik..."
+                            else -> "Arahkan Wajah ke Kamera"
+                        }
+
                         Text(
-                            text = if (isLiveFaceDetected) "Wajah Terdeteksi" else "Arahkan Wajah ke Kamera",
+                            text = statusLabel,
                             color = bracketColor,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.SemiBold
@@ -404,9 +452,9 @@ fun KioskScreen(
             }
         }
 
-        // 4. 🪪 REFINED WHITE COMPACT BADGE CARD (Only appears when someone is in front of camera)
+        // 4. 🪪 REFINED WHITE COMPACT BADGE CARD (When face matched or unrecognized)
         AnimatedVisibility(
-            visible = isLiveFaceDetected && selectedEmployee != null,
+            visible = isLiveFaceDetected && (selectedEmployee != null || isUnrecognizedFace),
             enter = fadeIn(tween(200)) + slideInVertically(initialOffsetY = { it / 2 }),
             exit = fadeOut(tween(200)) + slideOutVertically(targetOffsetY = { it / 2 }),
             modifier = Modifier
@@ -415,63 +463,10 @@ fun KioskScreen(
                 .navigationBarsPadding()
                 .padding(horizontal = 14.dp, vertical = 10.dp)
         ) {
-            val emp = selectedEmployee ?: return@AnimatedVisibility
-            val shiftResolution = repository.resolveShiftForEmployee(emp, settings)
+            if (selectedEmployee != null) {
+                val emp = selectedEmployee!!
+                val shiftResolution = repository.resolveShiftForEmployee(emp, settings)
 
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.Bottom
-            ) {
-                // Quick Employee Switcher (If multiple coworkers arrive together)
-                if (employees.size > 1) {
-                    LazyRow(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 6.dp),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        items(employees, key = { it.id }) { item ->
-                            val isSelected = item.id == emp.id
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = if (isSelected) PrimaryNavy else PureWhite,
-                                border = androidx.compose.foundation.BorderStroke(
-                                    width = 1.dp,
-                                    color = if (isSelected) PrimaryNavy else CardBorderLight
-                                ),
-                                shadowElevation = if (isSelected) 2.dp else 0.dp,
-                                modifier = Modifier.clickable {
-                                    selectedEmployee = item
-                                }
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    if (item.photoUri != null) {
-                                        AsyncImage(
-                                            model = item.photoUri,
-                                            contentDescription = null,
-                                            modifier = Modifier
-                                                .size(16.dp)
-                                                .clip(CircleShape),
-                                            contentScale = ContentScale.Crop
-                                        )
-                                    }
-                                    Text(
-                                        text = item.name,
-                                        color = if (isSelected) PureWhite else TextPrimaryLight,
-                                        fontSize = 11.sp,
-                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // PURE WHITE CARD
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -498,7 +493,7 @@ fun KioskScreen(
                                 // Photo / Initials
                                 Box(
                                     modifier = Modifier
-                                        .size(42.dp)
+                                        .size(44.dp)
                                         .clip(RoundedCornerShape(10.dp))
                                         .background(InputBgLight)
                                         .border(1.dp, CardBorderLight, RoundedCornerShape(10.dp)),
@@ -567,6 +562,20 @@ fun KioskScreen(
                                     }
                                 }
                             }
+
+                            // Match Confidence Badge
+                            Surface(
+                                color = AccentGreen.copy(alpha = 0.12f),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text(
+                                    text = "✓ ${(matchConfidenceScore * 100).toInt()}% Cocok",
+                                    color = AccentGreen,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                                )
+                            }
                         }
 
                         Spacer(modifier = Modifier.height(10.dp))
@@ -585,7 +594,7 @@ fun KioskScreen(
                                             val record = repository.processAttendance(
                                                 employee = emp,
                                                 checkType = CheckType.CHECK_IN,
-                                                confidenceScore = 0.99f
+                                                confidenceScore = matchConfidenceScore
                                             )
                                             val statusText = if (record.status == AttendanceStatus.ON_TIME) "Tepat Waktu" else "Terlambat"
                                             audioHelper.speak("Terima kasih ${emp.name}, berhasil Absen Masuk $statusText!")
@@ -615,7 +624,7 @@ fun KioskScreen(
                                             val record = repository.processAttendance(
                                                 employee = emp,
                                                 checkType = CheckType.CHECK_OUT,
-                                                confidenceScore = 0.99f
+                                                confidenceScore = matchConfidenceScore
                                             )
                                             val statusText = if (record.status == AttendanceStatus.OVERTIME) "Lembur" else "Berhasil"
                                             audioHelper.speak("Terima kasih ${emp.name}, berhasil Absen Pulang $statusText!")
@@ -635,6 +644,57 @@ fun KioskScreen(
                             ) {
                                 Text("ABSEN PULANG", color = PureWhite, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                             }
+                        }
+                    }
+                }
+            } else if (isUnrecognizedFace) {
+                // Unrecognized Face Alert Card
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .shadow(4.dp, RoundedCornerShape(14.dp)),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = PureWhite),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, AccentAmber.copy(alpha = 0.5f))
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .background(AccentAmber.copy(alpha = 0.15f), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.PersonSearch, contentDescription = null, tint = AccentAmber, modifier = Modifier.size(22.dp))
+                        }
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Wajah Belum Terdaftar",
+                                fontWeight = FontWeight.Bold,
+                                color = TextPrimaryLight,
+                                fontSize = 13.sp
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "Wajah tidak cocok dengan data karyawan terdaftar. Gunakan tombol Absen PIN di atas atau hubungi Admin.",
+                                color = TextSecondaryLight,
+                                fontSize = 11.sp
+                            )
+                        }
+
+                        OutlinedButton(
+                            onClick = { showPinDialog = true },
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, CardBorderLight)
+                        ) {
+                            Text("Absen PIN", color = PrimaryNavy, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                         }
                     }
                 }

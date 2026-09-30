@@ -189,6 +189,7 @@ fun AdminDashboardScreen(
                     )
                     2 -> KioskSettingsTab(
                         settings = currentSettings,
+                        repository = repository,
                         onSaveSettings = { updated ->
                             coroutineScope.launch {
                                 repository.saveKioskSettings(updated)
@@ -570,9 +571,11 @@ fun AttendanceLogsTab(
 @Composable
 fun KioskSettingsTab(
     settings: KioskSettings,
+    repository: AttendanceRepository,
     onSaveSettings: (KioskSettings) -> Unit
 ) {
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     var companyName by remember { mutableStateOf(settings.companyName) }
     var address by remember { mutableStateOf(settings.address) }
     var latitude by remember { mutableDoubleStateOf(settings.latitude) }

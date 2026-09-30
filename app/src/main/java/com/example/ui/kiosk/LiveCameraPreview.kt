@@ -22,11 +22,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.example.util.FaceBiometricHelper
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.face.Face
 import com.google.mlkit.vision.face.FaceDetection
 import com.google.mlkit.vision.face.FaceDetector
-import com.google.mlkit.vision.face.FaceDetectorOptions
 import java.util.concurrent.Executors
 
 @OptIn(ExperimentalGetImage::class)
@@ -34,23 +34,16 @@ import java.util.concurrent.Executors
 fun LiveCameraPreview(
     modifier: Modifier = Modifier,
     useFrontCamera: Boolean = true,
-    onFacesDetected: (List<Face>) -> Unit = {}
+    onFacesDetected: (List<Face>) -> Unit = {},
+    onFaceBiometrics: (Face, FloatArray) -> Unit = { _, _ -> }
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     var hasCameraError by remember { mutableStateOf(false) }
 
-    // Setup high-performance Real-Time ML Kit Face Detector
+    // Setup high-performance Accurate Real-Time ML Kit Face Detector
     val faceDetector: FaceDetector = remember {
-        val options = FaceDetectorOptions.Builder()
-            .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_FAST)
-            .setClassificationMode(FaceDetectorOptions.CLASSIFICATION_MODE_ALL)
-            .setLandmarkMode(FaceDetectorOptions.LANDMARK_MODE_NONE)
-            .setContourMode(FaceDetectorOptions.CONTOUR_MODE_NONE)
-            .setMinFaceSize(0.15f)
-            .enableTracking()
-            .build()
-        FaceDetection.getClient(options)
+        FaceDetection.getClient(FaceBiometricHelper.biometricDetectorOptions)
     }
 
     val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
@@ -96,6 +89,11 @@ fun LiveCameraPreview(
                                 faceDetector.process(image)
                                     .addOnSuccessListener { faces ->
                                         onFacesDetected(faces)
+                                        if (faces.isNotEmpty()) {
+                                            val primaryFace = faces.maxByOrNull { it.boundingBox.width() * it.boundingBox.height() } ?: faces.first()
+                                            val vector = FaceBiometricHelper.extractFeatureVector(primaryFace)
+                                            onFaceBiometrics(primaryFace, vector)
+                                        }
                                     }
                                     .addOnFailureListener { e ->
                                         Log.e("LiveCameraPreview", "ML Kit Face detection error", e)

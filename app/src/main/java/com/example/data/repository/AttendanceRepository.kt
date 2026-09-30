@@ -72,6 +72,55 @@ class AttendanceRepository(context: Context) {
         }
     }
 
+    suspend fun ensureEmployeeEmbeddings(context: Context, employees: List<Employee>) {
+        withContext(Dispatchers.IO) {
+            for (emp in employees) {
+                if (emp.faceEmbedding.isNullOrBlank() && !emp.photoUri.isNullOrBlank()) {
+                    val embedding = com.example.util.FaceBiometricHelper.extractEmbeddingFromUri(context, emp.photoUri)
+                    if (embedding != null) {
+                        val json = com.example.util.FaceBiometricHelper.serializeEmbedding(embedding)
+                        employeeDao.updateEmployee(emp.copy(faceEmbedding = json))
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Matches live biometric face vector against registered employees' biometrics.
+     * Returns the best matching Employee and similarity score (0.0 - 1.0), or null if no match meets threshold.
+     */
+    fun findBestMatchingEmployee(
+        liveBiometricVector: FloatArray,
+        employees: List<Employee>,
+        threshold: Float = 0.70f
+    ): Pair<Employee, Float>? {
+        if (employees.isEmpty() || liveBiometricVector.isEmpty()) return null
+
+        var bestMatch: Employee? = null
+        var highestScore = 0f
+
+        for (emp in employees) {
+            val empEmbedding = com.example.util.FaceBiometricHelper.deserializeEmbedding(emp.faceEmbedding)
+            val score = if (empEmbedding != null) {
+                com.example.util.FaceBiometricHelper.calculateSimilarity(liveBiometricVector, empEmbedding)
+            } else {
+                0f
+            }
+
+            if (score > highestScore) {
+                highestScore = score
+                bestMatch = emp
+            }
+        }
+
+        return if (bestMatch != null && highestScore >= threshold) {
+            Pair(bestMatch, highestScore)
+        } else {
+            null
+        }
+    }
+
     suspend fun deleteAttendance(id: Long) {
         withContext(Dispatchers.IO) {
             attendanceDao.deleteAttendance(id)
@@ -296,6 +345,46 @@ class AttendanceRepository(context: Context) {
                 repoScope.launch {
                     attendanceDao.saveKioskSettings(settings.copy(lastSheetsSyncStatus = errStatus))
                 }
+            }
+        }
+    }
+
+    suspend fun testSendWhatsApp(apiKey: String, targetPhone: String): Result<String> {
+        return withContext(Dispatchers.IO) {
+            try {
+                if (apiKey.isBlank() || targetPhone.isBlank()) {
+                    return@withContext Result.failure(Exception("API Token Fonnte dan Nomor WhatsApp harus diisi."))
+                }
+
+                val waMessage = """
+                    ✅ *TES KONEKSI WHATSAPP FONNTE BERHASIL!*
+                    ----------------------------------
+                    Aplikasi Smart Presensi Kiosk berhasil terhubung dengan API Fonnte.
+                    Waktu: ${SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale.getDefault()).format(Date())}
+                """.trimIndent()
+
+                val jsonBody = JSONObject().apply {
+                    put("target", targetPhone)
+                    put("message", waMessage)
+                }
+
+                val request = Request.Builder()
+                    .url("https://api.fonnte.com/send")
+                    .addHeader("Authorization", apiKey.trim())
+                    .post(jsonBody.toString().toRequestBody("application/json".toMediaTypeOrNull()))
+                    .build()
+
+                val response = httpClient.newCall(request).execute()
+                val responseBody = response.body?.string() ?: ""
+                response.close()
+
+                if (response.isSuccessful) {
+                    Result.success("Pesan WhatsApp berhasil dikirim ke $targetPhone! Response: $responseBody")
+                } else {
+                    Result.failure(Exception("Gagal mengirim (HTTP ${response.code}): $responseBody"))
+                }
+            } catch (e: Exception) {
+                Result.failure(e)
             }
         }
     }

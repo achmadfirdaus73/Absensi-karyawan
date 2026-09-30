@@ -37,6 +37,7 @@ import com.example.data.model.Employee
 import com.example.data.model.KioskSettings
 import com.example.data.model.ShiftAssignmentType
 import com.example.ui.theme.*
+import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileOutputStream
 
@@ -49,6 +50,7 @@ fun RegisterEmployeeDialog(
     onSaveEmployee: (Employee) -> Unit
 ) {
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     var name by remember { mutableStateOf(employeeToEdit?.name ?: "") }
     var nik by remember { mutableStateOf(employeeToEdit?.nik ?: "") }
     var division by remember { mutableStateOf(employeeToEdit?.division ?: "Operasional") }
@@ -58,6 +60,7 @@ fun RegisterEmployeeDialog(
     // Photo State
     var photoUriString by remember { mutableStateOf(employeeToEdit?.photoUri) }
     var capturedBitmap by remember { mutableStateOf<Bitmap?>(null) }
+    var isSaving by remember { mutableStateOf(false) }
 
     // Camera Capture Launcher
     val takePhotoLauncher = rememberLauncherForActivityResult(
@@ -541,6 +544,7 @@ fun RegisterEmployeeDialog(
 
                     Button(
                         onClick = {
+                            if (isSaving) return@Button
                             val finalRole = if (role == "Lainnya") {
                                 if (customRoleText.isNotBlank()) customRoleText.trim() else "Karyawan"
                             } else {
@@ -550,25 +554,44 @@ fun RegisterEmployeeDialog(
                             if (name.isBlank() || nik.isBlank()) {
                                 errorMessage = "Mohon isi Nama Lengkap dan NIK"
                             } else {
-                                val employee = (employeeToEdit ?: Employee(name = "", nik = "", division = "")).copy(
-                                    name = name.trim(),
-                                    nik = nik.trim(),
-                                    division = division.trim(),
-                                    role = finalRole,
-                                    shiftType = selectedShiftType.name,
-                                    customStartTime = customStartTime.trim(),
-                                    customEndTime = customEndTime.trim(),
-                                    pin = pin.trim(),
-                                    photoUri = photoUriString
-                                )
-                                onSaveEmployee(employee)
+                                isSaving = true
+                                errorMessage = null
+                                coroutineScope.launch {
+                                    val embeddingJson = if (!photoUriString.isNullOrBlank()) {
+                                        val vector = com.example.util.FaceBiometricHelper.extractEmbeddingFromUri(context, photoUriString!!)
+                                        if (vector != null) com.example.util.FaceBiometricHelper.serializeEmbedding(vector) else null
+                                    } else null
+
+                                    val employee = (employeeToEdit ?: Employee(name = "", nik = "", division = "")).copy(
+                                        name = name.trim(),
+                                        nik = nik.trim(),
+                                        division = division.trim(),
+                                        role = finalRole,
+                                        shiftType = selectedShiftType.name,
+                                        customStartTime = customStartTime.trim(),
+                                        customEndTime = customEndTime.trim(),
+                                        pin = pin.trim(),
+                                        photoUri = photoUriString,
+                                        faceEmbedding = embeddingJson ?: employeeToEdit?.faceEmbedding
+                                    )
+                                    onSaveEmployee(employee)
+                                    isSaving = false
+                                }
                             }
                         },
                         modifier = Modifier.weight(1f).height(48.dp),
                         shape = RoundedCornerShape(10.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = PrimaryNavy)
                     ) {
-                        Text("Simpan Karyawan", color = PureWhite, fontWeight = FontWeight.Bold)
+                        if (isSaving) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                color = PureWhite,
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Text("Simpan Karyawan", color = PureWhite, fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
             }
