@@ -150,17 +150,33 @@ fun FaceIdEnrollmentDialog(
                                                 isFaceInsideCircle = isGoodSize
 
                                                 if (isGoodSize && enrollmentProgress < 1.0f) {
-                                                    val vector = FaceBiometricHelper.extractFeatureVector(face)
+                                                    // Extract aligned canonical crop for higher-accuracy master embedding
+                                                    val frameBmp = try {
+                                                        val bmp = imageProxy.toBitmap()
+                                                        if (rotation != 0) {
+                                                            val matrix = Matrix().apply { postRotate(rotation.toFloat()) }
+                                                            val rotBmp = Bitmap.createBitmap(bmp, 0, 0, bmp.width, bmp.height, matrix, true)
+                                                            if (rotBmp != bmp) bmp.recycle()
+                                                            rotBmp
+                                                        } else bmp
+                                                    } catch (_: Exception) {
+                                                        null
+                                                    }
+
+                                                    val alignedCrop = if (frameBmp != null) {
+                                                        FaceBiometricHelper.alignAndCropFace(frameBmp, face)
+                                                    } else null
+
+                                                    val vector = FaceBiometricHelper.extractFeatureVector(face, alignedCrop)
                                                     collectedVectors.add(vector)
 
                                                     // Grab a clean frame snapshot for profile avatar
-                                                    if (bestSnapshotBitmap == null && enrollmentProgress > 0.4f) {
-                                                        try {
-                                                            val bmp = imageProxy.toBitmap()
-                                                            val matrix = Matrix().apply { postRotate(rotation.toFloat()) }
-                                                            bestSnapshotBitmap = Bitmap.createBitmap(bmp, 0, 0, bmp.width, bmp.height, matrix, true)
-                                                        } catch (_: Exception) {}
+                                                    if (bestSnapshotBitmap == null && enrollmentProgress > 0.4f && frameBmp != null) {
+                                                        bestSnapshotBitmap = Bitmap.createBitmap(frameBmp)
                                                     }
+
+                                                    alignedCrop?.recycle()
+                                                    frameBmp?.recycle()
 
                                                     val newProg = (collectedVectors.size / 12f).coerceIn(0f, 1f)
                                                     enrollmentProgress = newProg

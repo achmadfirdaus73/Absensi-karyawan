@@ -58,6 +58,7 @@ fun KioskScreen(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val employees by repository.allActiveEmployees.collectAsState(initial = emptyList())
+    val biometricTemplates by repository.allBiometricTemplates.collectAsState(initial = emptyList())
     val kioskSettingsState by repository.kioskSettingsFlow.collectAsState(initial = null)
     val settings = kioskSettingsState ?: KioskSettings()
 
@@ -100,6 +101,7 @@ fun KioskScreen(
     var matchConfidenceScore by remember { mutableFloatStateOf(0.98f) }
     var lastFaceDetectionTime by remember { mutableStateOf(0L) }
     var isProcessingAttendance by remember { mutableStateOf(false) }
+    val consensusBuffer = remember { mutableListOf<Long>() }
 
     // Auto-calculate biometric embeddings for existing registered employees if not yet cached
     LaunchedEffect(employees) {
@@ -168,18 +170,27 @@ fun KioskScreen(
                         val match = repository.findBestMatchingEmployee(
                             liveBiometricVector = liveVector,
                             employees = employees,
-                            threshold = settings.faceConfidenceThreshold
+                            threshold = settings.faceConfidenceThreshold,
+                            templates = biometricTemplates
                         )
 
                         if (match != null) {
-                            selectedEmployee = match.first
-                            matchConfidenceScore = match.second
-                            isUnrecognizedFace = false
+                            consensusBuffer.add(match.first.id)
+                            if (consensusBuffer.size > 4) consensusBuffer.removeAt(0)
+
+                            // Smooth multi-frame consensus: candidate must win majority of recent frames or be >= 93% confident
+                            if (consensusBuffer.count { it == match.first.id } >= 2 || match.second >= 0.93f) {
+                                selectedEmployee = match.first
+                                matchConfidenceScore = match.second
+                                isUnrecognizedFace = false
+                            }
                         } else {
+                            consensusBuffer.clear()
                             selectedEmployee = null
                             isUnrecognizedFace = true
                         }
                     } else {
+                        consensusBuffer.clear()
                         selectedEmployee = null
                         isUnrecognizedFace = false
                     }

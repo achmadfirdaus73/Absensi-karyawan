@@ -82,16 +82,38 @@ fun LiveCameraPreview(
                         imageAnalysis.setAnalyzer(cameraExecutor) { imageProxy: ImageProxy ->
                             val mediaImage = imageProxy.image
                             if (mediaImage != null) {
+                                val rotation = imageProxy.imageInfo.rotationDegrees
                                 val image = InputImage.fromMediaImage(
                                     mediaImage,
-                                    imageProxy.imageInfo.rotationDegrees
+                                    rotation
                                 )
                                 faceDetector.process(image)
                                     .addOnSuccessListener { faces ->
                                         onFacesDetected(faces)
                                         if (faces.isNotEmpty()) {
                                             val primaryFace = faces.maxByOrNull { it.boundingBox.width() * it.boundingBox.height() } ?: faces.first()
-                                            val vector = FaceBiometricHelper.extractFeatureVector(primaryFace)
+                                            
+                                            // Perform Face Alignment & Canonical 112x112 Cropping
+                                            val frameBitmap = try {
+                                                val bmp = imageProxy.toBitmap()
+                                                if (rotation != 0) {
+                                                    val matrix = android.graphics.Matrix().apply { postRotate(rotation.toFloat()) }
+                                                    val rotBmp = android.graphics.Bitmap.createBitmap(bmp, 0, 0, bmp.width, bmp.height, matrix, true)
+                                                    if (rotBmp != bmp) bmp.recycle()
+                                                    rotBmp
+                                                } else bmp
+                                            } catch (_: Exception) {
+                                                null
+                                            }
+
+                                            val alignedCrop = if (frameBitmap != null) {
+                                                FaceBiometricHelper.alignAndCropFace(frameBitmap, primaryFace)
+                                            } else null
+
+                                            val vector = FaceBiometricHelper.extractFeatureVector(primaryFace, alignedCrop)
+                                            alignedCrop?.recycle()
+                                            frameBitmap?.recycle()
+
                                             onFaceBiometrics(primaryFace, vector)
                                         }
                                     }

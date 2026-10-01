@@ -20,6 +20,7 @@ import java.util.concurrent.TimeUnit
 class AttendanceRepository(context: Context) {
     private val db = AppDatabase.getDatabase(context)
     private val employeeDao = db.employeeDao()
+    private val biometricTemplateDao = db.biometricTemplateDao()
     private val attendanceDao = db.attendanceDao()
     private val notificationDao = db.notificationDao()
     private val repoScope = CoroutineScope(Dispatchers.IO)
@@ -30,6 +31,7 @@ class AttendanceRepository(context: Context) {
         .build()
 
     val allActiveEmployees: Flow<List<Employee>> = employeeDao.getAllActiveEmployees()
+    val allBiometricTemplates: Flow<List<BiometricTemplate>> = biometricTemplateDao.getAllTemplates()
     val allAttendanceRecords: Flow<List<AttendanceRecord>> = attendanceDao.getAllAttendanceRecords()
     val kioskSettingsFlow: Flow<KioskSettings?> = attendanceDao.getKioskSettingsFlow()
     val allNotifications: Flow<List<AdminNotification>> = notificationDao.getAllNotifications()
@@ -56,32 +58,74 @@ class AttendanceRepository(context: Context) {
 
     suspend fun insertEmployee(employee: Employee): Long {
         return withContext(Dispatchers.IO) {
-            employeeDao.insertEmployee(employee)
+            val empId = employeeDao.insertEmployee(employee)
+            if (!employee.faceEmbedding.isNullOrBlank()) {
+                biometricTemplateDao.insertTemplate(
+                    BiometricTemplate(
+                        employeeId = empId,
+                        embeddingJson = employee.faceEmbedding,
+                        qualityScore = 1.0f,
+                        angleType = "MASTER_FUSION"
+                    )
+                )
+            }
+            empId
         }
     }
 
     suspend fun updateEmployee(employee: Employee) {
         withContext(Dispatchers.IO) {
             employeeDao.updateEmployee(employee)
+            if (!employee.faceEmbedding.isNullOrBlank()) {
+                biometricTemplateDao.insertTemplate(
+                    BiometricTemplate(
+                        employeeId = employee.id,
+                        embeddingJson = employee.faceEmbedding,
+                        qualityScore = 1.0f,
+                        angleType = "MASTER_FUSION"
+                    )
+                )
+            }
         }
     }
 
     suspend fun deleteEmployee(employee: Employee) {
         withContext(Dispatchers.IO) {
+            biometricTemplateDao.deleteTemplatesByEmployeeId(employee.id)
             employeeDao.deleteEmployee(employee)
+        }
+    }
+
+    suspend fun saveBiometricTemplate(template: BiometricTemplate): Long {
+        return withContext(Dispatchers.IO) {
+            biometricTemplateDao.insertTemplate(template)
         }
     }
 
     suspend fun ensureEmployeeEmbeddings(context: Context, employees: List<Employee>) {
         withContext(Dispatchers.IO) {
+            val existingTemplates = biometricTemplateDao.getAllTemplatesDirect().associateBy { it.employeeId }
             for (emp in employees) {
-                if (!emp.photoUri.isNullOrBlank()) {
+                var json = emp.faceEmbedding
+                if (json.isNullOrBlank() && !emp.photoUri.isNullOrBlank()) {
                     val embedding = com.example.util.FaceBiometricHelper.extractEmbeddingFromUri(context, emp.photoUri)
                     if (embedding != null) {
-                        val json = com.example.util.FaceBiometricHelper.serializeEmbedding(embedding)
-                        if (emp.faceEmbedding != json) {
-                            employeeDao.updateEmployee(emp.copy(faceEmbedding = json))
-                        }
+                        json = com.example.util.FaceBiometricHelper.serializeEmbedding(embedding)
+                        employeeDao.updateEmployee(emp.copy(faceEmbedding = json))
+                    }
+                }
+
+                if (!json.isNullOrBlank()) {
+                    val existing = existingTemplates[emp.id]
+                    if (existing == null || existing.embeddingJson != json) {
+                        biometricTemplateDao.insertTemplate(
+                            BiometricTemplate(
+                                employeeId = emp.id,
+                                embeddingJson = json,
+                                qualityScore = 1.0f,
+                                angleType = "MASTER_FUSION"
+                            )
+                        )
                     }
                 }
             }
@@ -89,33 +133,66 @@ class AttendanceRepository(context: Context) {
     }
 
     /**
-     * Matches live biometric face vector against registered employees' biometrics.
-     * Returns the best matching Employee and similarity score (0.0 - 1.0) ONLY if genuine match above threshold.
+     * Matches live biometric face vector against registered employees' biometric templates.
+     * Uses strict Employee ID mapping (via relational Map<Long, Employee>) to prevent index-based mismatch.
+     * Returns the best matching Employee and similarity score (0.0 - 1.0) ONLY if genuine match above threshold
+     * with strong Top-1 vs Top-2 margin separation to scale reliably to hundreds of employees.
      */
     fun findBestMatchingEmployee(
         liveBiometricVector: FloatArray,
         employees: List<Employee>,
-        threshold: Float = 0.85f
+        threshold: Float = 0.85f,
+        templates: List<BiometricTemplate>? = null
     ): Pair<Employee, Float>? {
         if (employees.isEmpty() || liveBiometricVector.isEmpty()) return null
 
-        var bestMatch: Employee? = null
+        val employeeById = employees.associateBy { it.id }
+        var bestMatchEmployee: Employee? = null
         var highestScore = 0f
+        var secondHighestScore = 0f
 
-        for (emp in employees) {
-            val empEmbedding = com.example.util.FaceBiometricHelper.deserializeEmbedding(emp.faceEmbedding) ?: continue
-            val score = com.example.util.FaceBiometricHelper.calculateSimilarity(liveBiometricVector, empEmbedding)
+        if (!templates.isNullOrEmpty()) {
+            // Match against dedicated BiometricTemplate entities mapped strictly to employeeId
+            for (tpl in templates) {
+                val emp = employeeById[tpl.employeeId] ?: continue
+                val tplEmbedding = com.example.util.FaceBiometricHelper.deserializeEmbedding(tpl.embeddingJson) ?: continue
+                val score = com.example.util.FaceBiometricHelper.calculateSimilarity(liveBiometricVector, tplEmbedding)
 
-            if (score > highestScore) {
-                highestScore = score
-                bestMatch = emp
+                if (score > highestScore) {
+                    secondHighestScore = highestScore
+                    highestScore = score
+                    bestMatchEmployee = emp
+                } else if (score > secondHighestScore) {
+                    secondHighestScore = score
+                }
+            }
+        } else {
+            // Direct employee embedded fallback
+            for (emp in employees) {
+                val empEmbedding = com.example.util.FaceBiometricHelper.deserializeEmbedding(emp.faceEmbedding) ?: continue
+                val score = com.example.util.FaceBiometricHelper.calculateSimilarity(liveBiometricVector, empEmbedding)
+
+                if (score > highestScore) {
+                    secondHighestScore = highestScore
+                    highestScore = score
+                    bestMatchEmployee = emp
+                } else if (score > secondHighestScore) {
+                    secondHighestScore = score
+                }
             }
         }
 
-        // Required threshold: strictly require real matching (default min 0.85)
         val minAcceptableThreshold = if (threshold > 0f) threshold else 0.85f
-        return if (bestMatch != null && highestScore >= minAcceptableThreshold) {
-            Pair(bestMatch, highestScore)
+
+        // Top-1 vs Top-2 Margin Isolation:
+        val hasClearWinner = if (employees.size > 1 && secondHighestScore > 0f) {
+            (highestScore - secondHighestScore >= 0.05f) || (highestScore >= 0.92f)
+        } else {
+            true
+        }
+
+        return if (bestMatchEmployee != null && highestScore >= minAcceptableThreshold && hasClearWinner) {
+            Pair(bestMatchEmployee, highestScore)
         } else {
             null
         }
